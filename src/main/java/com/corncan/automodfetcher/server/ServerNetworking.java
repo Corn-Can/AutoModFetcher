@@ -20,6 +20,11 @@ public final class ServerNetworking {
 	private ServerNetworking() {
 	}
 
+	/** The manifest built at startup, or null when sync is off or still being resolved. */
+	public static ModManifest currentManifest() {
+		return manifest;
+	}
+
 	public static void register() {
 		ServerLifecycleEvents.SERVER_STARTED.register(ServerNetworking::onServerStarted);
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> manifest = null);

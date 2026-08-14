@@ -27,7 +27,16 @@
 
 這是投報率最高的一個階段。做完之後第 1～3 步與第 5 步一起消失。
 
-### 1.1 匯出 Modrinth 整合包（`.mrpack`）★ 最高優先
+### 1.1 匯出 Modrinth 整合包（`.mrpack`）— ✅ 已完成
+
+`/automodfetcher export` 產生 `.mrpack`，內含所有可解析的模組與 Fabric Loader 版本宣告。
+`server.json` 的 `selfDownloadUrl` 設定好之後，AutoModFetcher 本身也會被包進去——沒有它的話，
+玩家拿到的是一次性快照，收不到之後的更新。
+
+驗證方式是把包裡每個網址真的下載一次、比對雜湊與大小，而不是看 JSON 覺得長得對。
+這揪出了一個 rebuild 項目的 SHA-1 不一致問題。
+
+<details><summary>原始規劃</summary>
 
 伺服器產生一個 `.mrpack`，內含 Fabric Loader 版本宣告、Fabric API、AutoModFetcher，以及所有可配送的伺服器模組。玩家用 Prism / Modrinth App / ATLauncher 匯入 —— **一次點擊，全部就位**。
 
@@ -36,6 +45,8 @@
 做完之後玩家的流程變成：匯入整合包 → 開遊戲 → 進伺服器。**1 次匯入 + 1 次點擊。**
 
 AutoModFetcher 在這之後負責的是**後續更新**，而不是初次安裝——那才是它真正擅長的事。
+
+</details>
 
 ### 1.2 匯出 CurseForge 整合包 ★ 與 1.1 同等重要，不是備案
 

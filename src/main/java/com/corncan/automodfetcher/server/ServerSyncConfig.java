@@ -32,6 +32,20 @@ public class ServerSyncConfig {
 	/** Syncing AutoModFetcher itself would mean asking the client to replace a running jar. */
 	public boolean includeSelf = false;
 
+	/** Shown as the pack name when exporting a modpack. */
+	public String packName = "Server Modpack";
+
+	public String packVersion = "1.0.0";
+
+	/**
+	 * Where players can download AutoModFetcher itself.
+	 *
+	 * <p>An exported pack is meant to be everything a player needs, and that includes this
+	 * mod — without it they get today's mods and no way to receive tomorrow's. It cannot be
+	 * filled in automatically because the server only has the jar, not a public URL for it.
+	 */
+	public String selfDownloadUrl = "";
+
 	public static ServerSyncConfig load() {
 		Path path = ModPaths.configDir().resolve(FILE_NAME);
 		ServerSyncConfig config = Json.read(path, ServerSyncConfig.class, ServerSyncConfig::new);

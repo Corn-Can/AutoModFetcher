@@ -1,5 +1,6 @@
 package com.corncan.automodfetcher;
 
+import com.corncan.automodfetcher.server.AutoModFetcherCommand;
 import com.corncan.automodfetcher.server.ServerNetworking;
 
 import net.fabricmc.api.ModInitializer;
@@ -16,6 +17,7 @@ public class AutoModFetcher implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		ServerNetworking.register();
+		AutoModFetcherCommand.register();
 	}
 
 	public static String version() {
