@@ -24,6 +24,9 @@ loom {
 		// mods folder and there is never anything to sync.
 		client {
 			runDir = "run/client"
+			// Loom randomises the dev username each launch, which makes it impossible to
+			// keep an ops entry pointing at you. Pin it.
+			programArgs "--username", "CornCan"
 		}
 		server {
 			runDir = "run/server"
