@@ -1,9 +1,11 @@
 package com.corncan.automodfetcher.server.export;
 
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -16,6 +18,9 @@ import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.network.ModSide;
 import com.corncan.automodfetcher.server.ServerSyncConfig;
+import com.corncan.automodfetcher.server.resolver.ModrinthResolver;
+import com.corncan.automodfetcher.server.resolver.Resolution;
+import com.corncan.automodfetcher.util.Hashing;
 import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 import com.google.gson.JsonArray;
@@ -70,13 +75,7 @@ public final class MrpackExporter {
 			}
 		}
 
-		if (!config.selfDownloadUrl.isBlank()) {
-			included += addSelf(files, config);
-		} else {
-			AutoModFetcher.LOGGER.warn(
-					"selfDownloadUrl is not set, so the pack will not contain AutoModFetcher. "
-							+ "Players who import it get today's mods but no way to receive later changes.");
-		}
+		included += addSelf(files, config);
 
 		// Files the server could not resolve cannot be in a pack either — a pack is a list of
 		// downloads, and these are exactly the ones with no download to list.
@@ -111,7 +110,18 @@ public final class MrpackExporter {
 		return file;
 	}
 
-	/** The pack has to carry this mod too, or it only ever delivers one snapshot. */
+	/**
+	 * The pack has to carry this mod too, or it only ever delivers one snapshot.
+	 *
+	 * <p>Without it, an import installs the mods the server has today and nothing keeps up
+	 * afterwards: the next time an operator adds a mod, every player is turned away until they
+	 * hunt down a freshly exported pack. Carrying it is what makes the pack a starting point
+	 * rather than a photograph.
+	 *
+	 * <p>It is looked up the same way every other mod is — the jar is sitting in the server's
+	 * own mods folder, so once this mod is published its hash resolves like anything else.
+	 * {@code selfDownloadUrl} is only for the window before that is true.
+	 */
 	private static int addSelf(JsonArray files, ServerSyncConfig config) {
 		Path own = ownJar();
 
@@ -120,15 +130,35 @@ public final class MrpackExporter {
 			return 0;
 		}
 
+		Hashing.FileHashes hashes;
+
 		try {
-			var hashes = com.corncan.automodfetcher.util.Hashing.hash(own);
-			files.add(fileEntry("mods/" + own.getFileName(), hashes.sha1(), hashes.sha512(), hashes.size(),
-					config.selfDownloadUrl.trim(), ModSide.BOTH));
-			return 1;
+			hashes = Hashing.hash(own);
 		} catch (IOException e) {
 			AutoModFetcher.LOGGER.warn("Could not hash this mod's own jar; leaving it out of the pack", e);
 			return 0;
 		}
+
+		HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
+		Resolution published = ModrinthResolver.resolve(http, List.of(hashes.sha1())).get(hashes.sha1());
+
+		if (published != null) {
+			files.add(fileEntry("mods/" + own.getFileName(), hashes.sha1(), hashes.sha512(), hashes.size(),
+					published.url(), ModSide.BOTH));
+			return 1;
+		}
+
+		if (!config.selfDownloadUrl.isBlank()) {
+			files.add(fileEntry("mods/" + own.getFileName(), hashes.sha1(), hashes.sha512(), hashes.size(),
+					config.selfDownloadUrl.trim(), ModSide.BOTH));
+			return 1;
+		}
+
+		AutoModFetcher.LOGGER.warn(
+				"This mod's own jar is not on Modrinth and selfDownloadUrl is unset, so the pack "
+						+ "cannot contain it. Anyone importing it gets today's mods and no way to "
+						+ "receive later changes.");
+		return 0;
 	}
 
 	private static Path ownJar() {

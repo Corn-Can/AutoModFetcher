@@ -8,17 +8,31 @@
 
 ## 給玩家
 
-### 先手動裝三樣東西
+### 最省事的做法：跟管理員要整合包
 
-自動化開始之前，你得先讓這個模組能在你的遊戲裡跑起來。所以這三步沒辦法自動：
+如果伺服器管理員提供了整合包檔案，用它就對了——**一次匯入，Fabric、所有模組、以及這個模組本身全部到位**。
+
+| 你用的啟動器 | 要哪個檔案 |
+|---|---|
+| Modrinth App、Prism、ATLauncher、GDLauncher | `.mrpack` |
+| CurseForge App | CurseForge 格式的 `.zip` |
+| **官方 Minecraft 啟動器** | **沒有整合包功能，走下面那條** |
+
+### 官方啟動器：手動裝三樣東西
+
+官方啟動器不支援任何整合包格式，所以這三步得自己來：
 
 1. **Fabric Loader** — 用[官方安裝程式](https://fabricmc.net/use/installer/)，版本選 **1.20.1**
 2. **Fabric API** — 從 [Modrinth](https://modrinth.com/mod/fabric-api) 下載 1.20.1 版，放進 `mods/`
 3. **AutoModFetcher** — 把 `automodfetcher-x.y.z.jar` 放進 `mods/`
 
-`mods/` 資料夾通常在 `%APPDATA%\.minecraft\mods`（Windows）。
+`mods/` 資料夾通常在 `%APPDATA%\.minecraft\mods`（Windows）。裝好之後就全自動了。
 
-> 為什麼這三步不能自動？因為要有人幫你裝模組，得先有東西在你的遊戲裡執行。這是所有這類模組的共同限制。
+> 為什麼這三步不能自動？因為要有人幫你裝模組，得先有東西在你的遊戲裡執行。
+
+**強烈建議在啟動器的「安裝檔」裡替這台伺服器指定獨立的遊戲目錄。** 否則伺服器的模組會裝進共用的 `.minecraft`，跟著出現在你所有的單人存檔和其他伺服器上。
+
+（如果你不排斥換啟動器，[Prism Launcher](https://prismlauncher.org/) 是免費開源的，能一鍵匯入 `.mrpack`，而且每個實例互相隔離。）
 
 ### 之後會發生什麼
 
@@ -74,6 +88,52 @@
 
 **只支援專用伺服器**（dedicated server）。單人開的 LAN 世界不會啟用。
 
+### 匯出整合包：`/automodfetcher export`
+
+這是**降低新玩家門檻最有效的一招**。指令會一次產生兩個檔案到 `config/automodfetcher/export/`：
+
+| 檔案 | 給誰用 |
+|---|---|
+| `modpack.mrpack` | Modrinth App、Prism、ATLauncher、GDLauncher |
+| `modpack-curseforge.zip` | CurseForge App（需要 `curseforgeApiKey`） |
+
+**兩種都要給。** CurseForge App 讀不了 mrpack，而 Modrinth 那邊的啟動器讀不了 CF 格式——只出一種等於放棄一半玩家。
+
+玩家匯入之後，Fabric、Fabric API、所有伺服器模組、以及 AutoModFetcher 本身都一次到位。**原本的三次手動安裝變成一次匯入。**
+
+也可以只產生其中一種：
+
+```
+/automodfetcher export modrinth
+/automodfetcher export curseforge
+```
+
+**整合包裡不會夾帶任何模組檔案**，只有下載網址（mrpack）或專案編號（CF），所以不涉及轉載他人的模組。
+
+#### 兩種格式各自的盲點
+
+- **mrpack 無法包含作者關閉第三方下載的模組**——沒有網址可寫。
+- **CF 包無法包含沒在 CurseForge 上架的模組**——沒有專案編號可寫。
+- 反過來說，**CF 包能送出 mrpack 送不了的那些**，因為是 CurseForge App 自己去抓，不算第三方下載。
+
+指令執行後會逐一列出被排除的檔案與原因。
+
+#### 為什麼整合包裡要有 AutoModFetcher 本身
+
+沒有它，整合包只是**當天的快照**——你下次改模組，所有玩家都得等你重新匯出、再重新匯入一次。有它，玩家連線時自動同步。
+
+這一項不需要你設定：這個模組發布到平台之後，它的 jar 就跟其他模組一樣能被雜湊查到。`selfDownloadUrl` 只是**還沒上架前的備援**。
+
+### 官方 Minecraft 啟動器的玩家
+
+官方啟動器**沒有整合包這個功能**，所以上面兩個檔案對他們沒用。他們只能：
+
+1. 用 [Fabric 官方安裝程式](https://fabricmc.net/use/installer/)裝 Loader
+2. 手動放入 Fabric API 與 AutoModFetcher 兩個 jar
+3. 之後就全自動了
+
+值得在你的說明裡提醒他們：**在啟動器的「安裝檔」設定裡指定獨立的遊戲目錄**。否則伺服器的模組會裝進共用的 `.minecraft`，跟著出現在他們所有的單人存檔裡。模組偵測到這個情況時會在畫面上提醒一句。
+
 ### 運作方式
 
 伺服器啟動時掃描自己的 `mods/`，替每個檔案找出下載網址，順序是：
@@ -105,18 +165,25 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
     "my-private-mod-1.0.jar": "https://example.com/my-private-mod-1.0.jar"
   },
   "includeServerOnlyMods": false,
-  "includeSelf": false
+  "includeSelf": false,
+  "packName": "Server Modpack",
+  "packVersion": "1.0.0",
+  "selfDownloadUrl": "",
+  "curseforgeLookupLimit": 50
 }
 ```
 
 | 欄位 | 說明 |
 |---|---|
 | `syncEnabled` | 關掉後行為與沒裝這個模組一樣 |
-| `curseforgeApiKey` | 只在有模組不在 Modrinth 上時才需要 |
+| `curseforgeApiKey` | 只在有模組不在 Modrinth 上、或要匯出 CF 整合包時才需要 |
 | `excludeFileNames` | 不要通知客戶端的檔案，支援結尾 `*` 萬用字元 |
-| `manualUrls` | 兩個平台都查不到時，自己指定下載網址（key 是完整檔名） |
+| `manualUrls` | 兩個平台都查不到時，自己指定下載網址（key 是完整檔名）。**必須提供與伺服器上位元組完全相同的檔案**，否則客戶端驗證會失敗 |
 | `includeServerOnlyMods` | 純伺服器端模組客戶端不需要，預設不送 |
-| `includeSelf` | 預設 false，避免要求客戶端替換正在執行中的自己 |
+| `includeSelf` | 預設 false，避免要求客戶端替換正在執行中的自己。不影響整合包匯出 |
+| `packName` / `packVersion` | 匯出整合包時顯示的名稱與版本 |
+| `selfDownloadUrl` | 這個模組還沒上架平台時的備援下載網址，上架後可留空 |
+| `curseforgeLookupLimit` | 匯出 CF 包時，最多用名稱查詢幾個模組。每個花 2 次 API 請求，CF 未公開速率上限，所以設了保護 |
 
 模組的 `environment` 欄位會被讀取，標記為 `server` 的不會出現在客戶端清單裡。
 
@@ -130,15 +197,19 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 
 這也表示：`mods/` 裡混進非模組的 jar（函式庫、誤放的檔案）不會造成災難，只會產生一筆雜訊警告。
 
-### 玩家仍需自行安裝 AutoModFetcher
+### 玩家怎麼拿到第一份
 
-`includeSelf` 預設關閉，所以這個模組不會同步它自己。你需要提供給玩家的最小組合是：
+這個模組沒辦法幫玩家安裝它自己——它得先跑起來才能做事。所以第一份一定是手動的，差別只在有多痛：
 
-- Fabric Loader 1.20.1
-- Fabric API
-- AutoModFetcher
+| 管道 | 玩家要做幾件事 |
+|---|---|
+| 你提供的整合包 | **匯入一次**，Fabric API 與本模組都在裡面 |
+| Modrinth / CurseForge 的 app | 安裝本模組，平台會一併處理 Fabric API 相依 |
+| 官方啟動器 | 裝 Fabric，再手動放兩個 jar |
 
-建議把後兩個 jar 打包成一個 zip 給玩家，附上上面「給玩家」那段的說明。
+**上架時記得在平台專案頁面把 Fabric API 設成 required dependency。** 那是平台層的設定，jar 裡的宣告不會自動同步過去。
+
+只有官方啟動器的玩家需要手動放 jar。如果那群人佔比高，可以在說明裡附一個含這兩個 jar 的 zip——Fabric API 是 Apache-2.0，可以合法轉載。
 
 ---
 

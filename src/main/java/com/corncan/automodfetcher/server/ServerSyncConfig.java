@@ -38,11 +38,12 @@ public class ServerSyncConfig {
 	public String packVersion = "1.0.0";
 
 	/**
-	 * Where players can download AutoModFetcher itself.
+	 * Fallback download URL for AutoModFetcher itself, used only when exporting a modpack.
 	 *
-	 * <p>An exported pack is meant to be everything a player needs, and that includes this
-	 * mod — without it they get today's mods and no way to receive tomorrow's. It cannot be
-	 * filled in automatically because the server only has the jar, not a public URL for it.
+	 * <p>Normally unnecessary: the jar sits in the server's own mods folder, so a published
+	 * release resolves by hash exactly like any other mod. This exists for the window before
+	 * a version is on a platform — a pack without this mod installs today's mods and then
+	 * never keeps up.
 	 */
 	public String selfDownloadUrl = "";
 
