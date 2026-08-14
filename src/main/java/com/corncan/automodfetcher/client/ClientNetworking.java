@@ -55,6 +55,20 @@ public final class ClientNetworking {
 					return respond(false);
 				}
 
+				if (!plan.hasActionableWork()) {
+					// Nothing here is fixable by downloading, so blocking would trap the player
+					// in a restart loop over mods we cannot supply. Report and let them through:
+					// if the server really needs one of these, it will say so itself.
+					AutoModFetcher.LOGGER.warn(
+							"Connecting anyway; these mods could not be synced and may need "
+									+ "installing by hand: {}{}",
+							String.join(", ", plan.manual()),
+							plan.blocked().stream()
+									.map(blocked -> " " + blocked.entry().fileName() + " (blocked)")
+									.reduce("", String::concat));
+					return respond(false);
+				}
+
 				AutoModFetcher.LOGGER.info("Mod sync needed: {} to download, {} blocked, {} to remove, {} manual",
 						plan.downloads().size(), plan.blocked().size(), plan.deletions().size(),
 						plan.manual().size());

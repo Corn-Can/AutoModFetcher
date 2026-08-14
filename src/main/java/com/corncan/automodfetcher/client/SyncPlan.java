@@ -28,9 +28,14 @@ public record SyncPlan(List<ModEntry> downloads, List<Blocked> blocked, List<Str
 		return downloads.isEmpty() && blocked.isEmpty() && deletions.isEmpty() && manual.isEmpty();
 	}
 
-	/** True when joining is impossible no matter what we do here. */
-	public boolean hasUnfixable() {
-		return !blocked.isEmpty() || !manual.isEmpty();
+	/**
+	 * Whether there is anything this mod can actually do about the difference.
+	 *
+	 * <p>Blocked and manual entries are reports, not tasks — no amount of restarting fixes
+	 * them, so they must never be a reason to keep a player out of a server.
+	 */
+	public boolean hasActionableWork() {
+		return !downloads.isEmpty() || !deletions.isEmpty();
 	}
 
 	public long totalDownloadBytes() {
