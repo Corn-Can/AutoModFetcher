@@ -71,7 +71,7 @@ public class ModSyncProgressScreen extends Screen {
 				this.width / 2, barY + 16, 0xFFA0A0A0);
 
 		list.setLines(buildLines());
-		list.render(context, this.textRenderer);
+		list.render(context, this.textRenderer, mouseX, mouseY);
 	}
 
 	private List<LineList.Line> buildLines() {
@@ -86,14 +86,14 @@ public class ModSyncProgressScreen extends Screen {
 				case PENDING -> LineList.Line.GREY;
 			};
 
-			lines.add(new LineList.Line(Text.translatable(
+			lines.add(LineList.Line.of(Text.translatable(
 					"automodfetcher.progress.entry." + status.name().toLowerCase(java.util.Locale.ROOT),
 					entry.fileName()), color));
 
 			String reason = session.failureReasonOf(entry.fileName());
 
 			if (status == DownloadSession.Status.FAILED && reason != null) {
-				lines.add(new LineList.Line(Text.literal("    " + reason), LineList.Line.GREY));
+				lines.add(LineList.Line.of(Text.literal("    " + reason), LineList.Line.GREY));
 			}
 		}
 

@@ -17,13 +17,27 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
+import net.minecraft.client.network.ServerInfo;
 import net.minecraft.network.PacketByteBuf;
 
 @Environment(EnvType.CLIENT)
 public final class ClientNetworking {
 	private static volatile ClientConfig config;
 
+	/** Remembered so the confirm screen can reconnect to the server we were just turned away from. */
+	private static volatile ServerInfo lastServer;
+
 	private ClientNetworking() {
+	}
+
+	public static ServerInfo lastServer() {
+		return lastServer;
+	}
+
+	/** The key a skip decision is stored under, or null when we cannot identify the server. */
+	public static String serverKey() {
+		ServerInfo server = lastServer;
+		return server != null ? server.address : null;
 	}
 
 	public static void register(ClientConfig clientConfig) {
@@ -40,9 +54,14 @@ public final class ClientNetworking {
 		// Read the buffer here, on the netty thread: it is recycled the moment this method
 		// returns, so nothing may touch it from the async work below.
 		ModManifest manifest = ModManifest.read(buf);
+		lastServer = client.getCurrentServerEntry();
 
 		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved",
 				manifest.entries().size(), manifest.unresolved().size());
+
+		if (lastServer == null) {
+			AutoModFetcher.LOGGER.debug("No server entry for this connection; a skip cannot be remembered");
+		}
 
 		// Returning an unfinished future holds the login open until we have decided, which is
 		// exactly the window we need to compare against the local mods folder.
@@ -55,17 +74,12 @@ public final class ClientNetworking {
 					return respond(false);
 				}
 
-				if (!plan.hasActionableWork()) {
-					// Nothing here is fixable by downloading, so blocking would trap the player
-					// in a restart loop over mods we cannot supply. Report and let them through:
-					// if the server really needs one of these, it will say so itself.
-					AutoModFetcher.LOGGER.warn(
-							"Connecting anyway; these mods could not be synced and may need "
-									+ "installing by hand: {}{}",
-							String.join(", ", plan.manual()),
-							plan.blocked().stream()
-									.map(blocked -> " " + blocked.entry().fileName() + " (blocked)")
-									.reduce("", String::concat));
+				// Nothing we can install, and the player already said to go ahead with exactly
+				// this set missing. Asking again every time they play would be the same trap in
+				// slower motion.
+				if (!plan.hasActionableWork()
+						&& SkipDecisions.load().isAccepted(serverKey(), plan.unavailableSignature())) {
+					AutoModFetcher.LOGGER.info("Connecting anyway; the player accepted this before");
 					return respond(false);
 				}
 

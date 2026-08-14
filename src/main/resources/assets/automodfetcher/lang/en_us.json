@@ -10,6 +10,7 @@
 	"automodfetcher.confirm.file_detail": "    %s from %s",
 	"automodfetcher.confirm.section.blocked": "Refused (%s):",
 	"automodfetcher.confirm.section.manual": "Install these yourself (%s):",
+	"automodfetcher.confirm.open_page": "    Open %s",
 	"automodfetcher.confirm.section.remove": "Will be removed on the next launch (%s):",
 	"automodfetcher.confirm.blocked_hint": "  Add the host to allowedDomains in %s if you trust it.",
 	"automodfetcher.blocked.domain": "    Host %s is not on your allow list",
@@ -27,5 +28,8 @@
 	"automodfetcher.complete.failed": "%s mod(s) failed to download",
 	"automodfetcher.complete.restart": "Restart the game, then join the server again.",
 	"automodfetcher.complete.quit": "Quit game",
-	"automodfetcher.complete.menu": "Back to menu"
+	"automodfetcher.complete.menu": "Back to menu",
+	"automodfetcher.confirm.connect_anyway": "Connect anyway",
+	"automodfetcher.complete.restart_now": "Restart now",
+	"automodfetcher.complete.restart_failed": "Could not restart automatically — please close and reopen the game."
 }

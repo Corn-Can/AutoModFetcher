@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.corncan.automodfetcher.AutoModFetcher;
+import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.server.ServerModScanner.ScannedMod;
@@ -39,6 +40,7 @@ public final class ManifestBuilder {
 
 		ResolveCache cache = ResolveCache.load();
 		Map<String, Resolution> resolved = new HashMap<>();
+		Map<String, String> pages = new HashMap<>();
 		List<ScannedMod> needLookup = new ArrayList<>();
 
 		for (ScannedMod mod : mods) {
@@ -55,13 +57,20 @@ public final class ManifestBuilder {
 
 			if (cached != null) {
 				resolved.put(mod.sha1(), cached);
-			} else if (!cache.hasFreshMiss(mod.sha1())) {
+			} else if (cache.hasFreshMiss(mod.sha1())) {
+				// Skipping the lookup must not also drop the link we found last time.
+				String page = cache.pageFor(mod.sha1());
+
+				if (page != null) {
+					pages.put(mod.sha1(), page);
+				}
+			} else {
 				needLookup.add(mod);
 			}
 		}
 
 		if (!needLookup.isEmpty()) {
-			lookUpOnPlatforms(config, needLookup, resolved, cache);
+			lookUpOnPlatforms(config, needLookup, resolved, cache, pages);
 		}
 
 		Set<String> knownSha1 = new HashSet<>();
@@ -69,11 +78,11 @@ public final class ManifestBuilder {
 		cache.retainOnly(knownSha1);
 		cache.save();
 
-		return assemble(mods, resolved);
+		return assemble(mods, resolved, pages);
 	}
 
 	private static void lookUpOnPlatforms(ServerSyncConfig config, List<ScannedMod> needLookup,
-			Map<String, Resolution> resolved, ResolveCache cache) {
+			Map<String, Resolution> resolved, ResolveCache cache, Map<String, String> pages) {
 		HttpClient http = HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(15))
 				.followRedirects(HttpClient.Redirect.NORMAL)
@@ -93,11 +102,13 @@ public final class ManifestBuilder {
 				continue;
 			}
 
-			Resolution rebuild = ModrinthResolver.resolveByModVersion(http, mod.modId(), mod.modVersion(),
-					gameVersion);
+			ModrinthResolver.Lookup lookup = ModrinthResolver.resolveByModVersion(http, mod.modId(),
+					mod.modVersion(), gameVersion);
 
-			if (rebuild != null) {
-				resolved.put(mod.sha1(), rebuild);
+			if (lookup.resolution() != null) {
+				resolved.put(mod.sha1(), lookup.resolution());
+			} else if (lookup.projectPage() != null) {
+				pages.put(mod.sha1(), lookup.projectPage());
 			}
 		}
 
@@ -106,7 +117,11 @@ public final class ManifestBuilder {
 				.toList();
 
 		if (!stillMissing.isEmpty() && !config.curseforgeApiKey.isBlank()) {
-			resolved.putAll(CurseForgeResolver.resolve(http, config.curseforgeApiKey, fingerprint(stillMissing)));
+			CurseForgeResolver.Result curseForge = CurseForgeResolver.resolve(http, config.curseforgeApiKey,
+					fingerprint(stillMissing));
+			resolved.putAll(curseForge.resolved());
+			// A CurseForge page beats a Modrinth one here: this file came from CurseForge.
+			pages.putAll(curseForge.blockedPages());
 		}
 
 		for (ScannedMod mod : needLookup) {
@@ -115,7 +130,7 @@ public final class ManifestBuilder {
 			if (resolution != null) {
 				cache.putHit(mod.sha1(), resolution);
 			} else {
-				cache.putMiss(mod.sha1());
+				cache.putMiss(mod.sha1(), pages.get(mod.sha1()));
 			}
 		}
 	}
@@ -134,9 +149,10 @@ public final class ManifestBuilder {
 		return fingerprints;
 	}
 
-	private static ModManifest assemble(List<ScannedMod> mods, Map<String, Resolution> resolved) {
+	private static ModManifest assemble(List<ScannedMod> mods, Map<String, Resolution> resolved,
+			Map<String, String> pages) {
 		List<ModEntry> entries = new ArrayList<>();
-		List<String> unresolved = new ArrayList<>();
+		List<ManualEntry> unresolved = new ArrayList<>();
 
 		int rebuilds = 0;
 
@@ -144,7 +160,7 @@ public final class ManifestBuilder {
 			Resolution resolution = resolved.get(mod.sha1());
 
 			if (resolution == null) {
-				unresolved.add(mod.fileName());
+				unresolved.add(ManualEntry.of(mod.fileName(), mod.sha512(), pages.get(mod.sha1())));
 				continue;
 			}
 
@@ -169,11 +185,25 @@ public final class ManifestBuilder {
 							+ "this server's exact file", rebuilds);
 		}
 
-		if (!unresolved.isEmpty()) {
+		// Two different situations, and only one of them is yours to fix. A file no platform
+		// carries can go in manualUrls. A file whose author switched off third-party
+		// downloads must not — hosting it yourself is the very thing they opted out of.
+		List<String> unknown = unresolved.stream().filter(entry -> !entry.hasPage())
+				.map(ManualEntry::fileName).toList();
+		List<ManualEntry> withheld = unresolved.stream().filter(ManualEntry::hasPage).toList();
+
+		if (!unknown.isEmpty()) {
 			AutoModFetcher.LOGGER.warn(
-					"No download URL for: {}. Add entries to manualUrls in config/{}/{} "
-							+ "(or set curseforgeApiKey) — players will be told to install these by hand.",
-					String.join(", ", unresolved), AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
+					"No platform carries: {}. Add a download URL to manualUrls in config/{}/{}, "
+							+ "or players will be asked to install these by hand.",
+					String.join(", ", unknown), AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
+		}
+
+		for (ManualEntry entry : withheld) {
+			AutoModFetcher.LOGGER.warn(
+					"{} cannot be distributed automatically — its author does not allow third-party "
+							+ "downloads. Players will be pointed at {}. Do not work around this by "
+							+ "hosting the file yourself.", entry.fileName(), entry.pageUrl());
 		}
 
 		return new ModManifest(List.copyOf(entries), List.copyOf(unresolved));

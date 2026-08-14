@@ -2,6 +2,7 @@ package com.corncan.automodfetcher.client;
 
 import java.util.List;
 
+import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 
 import net.fabricmc.api.EnvType;
@@ -17,7 +18,7 @@ import net.fabricmc.api.Environment;
  */
 @Environment(EnvType.CLIENT)
 public record SyncPlan(List<ModEntry> downloads, List<Blocked> blocked, List<String> deletions,
-		List<String> manual) {
+		List<ManualEntry> manual) {
 
 	public record Blocked(ModEntry entry, String reasonKey) {
 		public static final String REASON_DOMAIN = "automodfetcher.blocked.domain";
@@ -36,6 +37,18 @@ public record SyncPlan(List<ModEntry> downloads, List<Blocked> blocked, List<Str
 	 */
 	public boolean hasActionableWork() {
 		return !downloads.isEmpty() || !deletions.isEmpty();
+	}
+
+	/**
+	 * Identifies what is unavailable, so a remembered decision only stands while the situation
+	 * that prompted it is unchanged.
+	 */
+	public String unavailableSignature() {
+		return java.util.stream.Stream.concat(
+						manual.stream().map(ManualEntry::fileName),
+						blocked.stream().map(entry -> entry.entry().fileName()))
+				.sorted()
+				.collect(java.util.stream.Collectors.joining("|"));
 	}
 
 	public long totalDownloadBytes() {

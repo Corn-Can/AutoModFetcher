@@ -107,12 +107,13 @@ public final class ModrinthResolver {
 	 * Modrinth's hash rather than the server's copy, because they are no longer the same
 	 * bytes.
 	 *
-	 * @return a resolution, or null if the mod, the version or the game version is not there
+	 * <p>When the project exists but carries no matching release, the lookup still yields its
+	 * page — a player who has to install the mod by hand can at least be sent somewhere.
 	 */
-	public static Resolution resolveByModVersion(HttpClient http, String modId, String modVersion,
+	public static Lookup resolveByModVersion(HttpClient http, String modId, String modVersion,
 			String gameVersion) {
 		if (modId == null || modId.isBlank() || modVersion == null || modVersion.isBlank()) {
-			return null;
+			return Lookup.NOTHING;
 		}
 
 		try {
@@ -132,18 +133,20 @@ public final class ModrinthResolver {
 			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if (response.statusCode() == 404) {
-				return null;
+				return Lookup.NOTHING;
 			}
 
 			if (response.statusCode() != 200) {
 				AutoModFetcher.LOGGER.debug("Modrinth returned HTTP {} looking up {}", response.statusCode(), modId);
-				return null;
+				return Lookup.NOTHING;
 			}
 
+			// A 200 means the project exists, whatever versions it happens to carry.
+			String projectPage = "https://modrinth.com/mod/" + modId;
 			JsonArray versions = Json.GSON.fromJson(response.body(), JsonArray.class);
 
 			if (versions == null) {
-				return null;
+				return new Lookup(null, projectPage);
 			}
 
 			for (JsonElement versionElement : versions) {
@@ -163,14 +166,24 @@ public final class ModrinthResolver {
 				if (resolution != null) {
 					AutoModFetcher.LOGGER.info("Matched {} {} to Modrinth release {}", modId, modVersion,
 							number.getAsString());
-					return resolution;
+					return new Lookup(resolution, projectPage);
 				}
 			}
+
+			return new Lookup(null, projectPage);
 		} catch (Exception e) {
 			AutoModFetcher.LOGGER.debug("Modrinth lookup by id failed for {}", modId, e);
 		}
 
-		return null;
+		return Lookup.NOTHING;
+	}
+
+	/**
+	 * @param resolution  a usable download, or null when no release matched
+	 * @param projectPage the mod's Modrinth page when the project exists, otherwise null
+	 */
+	public record Lookup(Resolution resolution, String projectPage) {
+		static final Lookup NOTHING = new Lookup(null, null);
 	}
 
 	private static Resolution firstFile(JsonObject version) {

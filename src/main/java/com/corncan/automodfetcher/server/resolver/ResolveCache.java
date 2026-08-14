@@ -31,6 +31,9 @@ public class ResolveCache {
 		public String sha512;
 		public long size;
 
+		/** The mod's page, remembered for misses so players keep getting a link to follow. */
+		public String pageUrl;
+
 		public boolean isHit() {
 			return url != null && !url.isBlank();
 		}
@@ -77,10 +80,22 @@ public class ResolveCache {
 		bySha1.put(sha1, entry);
 	}
 
-	public void putMiss(String sha1) {
+	public void putMiss(String sha1, String pageUrl) {
 		Entry entry = new Entry();
 		entry.checkedAt = System.currentTimeMillis();
+		entry.pageUrl = pageUrl;
 		bySha1.put(sha1, entry);
+	}
+
+	/**
+	 * The page remembered for a file we could not resolve.
+	 *
+	 * <p>Needed because a cached miss skips the lookup entirely: without this the link shown
+	 * to players would quietly disappear the next time the server restarted.
+	 */
+	public String pageFor(String sha1) {
+		Entry entry = bySha1.get(sha1);
+		return entry != null ? entry.pageUrl : null;
 	}
 
 	/** Drops entries for files that are no longer in the mods folder. */

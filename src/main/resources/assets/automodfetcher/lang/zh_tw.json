@@ -10,6 +10,7 @@
 	"automodfetcher.confirm.file_detail": "    %s，來自 %s",
 	"automodfetcher.confirm.section.blocked": "已拒絕（%s 個）：",
 	"automodfetcher.confirm.section.manual": "請自行安裝（%s 個）：",
+	"automodfetcher.confirm.open_page": "    開啟 %s",
 	"automodfetcher.confirm.section.remove": "下次啟動時移除（%s 個）：",
 	"automodfetcher.confirm.blocked_hint": "  若你信任該來源，可將網域加入 %s 的 allowedDomains。",
 	"automodfetcher.blocked.domain": "    網域 %s 不在你的白名單中",
@@ -27,5 +28,8 @@
 	"automodfetcher.complete.failed": "%s 個模組下載失敗",
 	"automodfetcher.complete.restart": "請重新啟動遊戲，然後重新加入伺服器。",
 	"automodfetcher.complete.quit": "關閉遊戲",
-	"automodfetcher.complete.menu": "回主選單"
+	"automodfetcher.complete.menu": "回主選單",
+	"automodfetcher.confirm.connect_anyway": "仍要連線",
+	"automodfetcher.complete.restart_now": "立即重新啟動",
+	"automodfetcher.complete.restart_failed": "無法自動重啟——請手動關閉並重新開啟遊戲。"
 }

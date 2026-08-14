@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 
@@ -58,11 +59,22 @@ public final class SyncPlanner {
 		downloads.forEach(entry -> incoming.add(entry.fileName()));
 		deletions = deletions.stream().filter(name -> !incoming.contains(name)).toList();
 
-		List<String> manual = manifest.unresolved().stream()
-				.filter(fileName -> !index.fileNames().contains(fileName.toLowerCase(Locale.ROOT)))
+		// Hash first: a browser renames a duplicate download to "mod (1).jar", and the player
+		// should not be told to install something they already have. The name is only a
+		// fallback for servers that could not hash the file.
+		List<ManualEntry> manual = manifest.unresolved().stream()
+				.filter(entry -> !hasLocally(entry, index))
 				.toList();
 
 		return new SyncPlan(List.copyOf(downloads), List.copyOf(blocked), List.copyOf(deletions), manual);
+	}
+
+	private static boolean hasLocally(ManualEntry entry, ClientModIndex.Index index) {
+		if (!entry.sha512().isBlank()) {
+			return index.sha512Hashes().contains(entry.sha512().toLowerCase(Locale.ROOT));
+		}
+
+		return index.fileNames().contains(entry.fileName().toLowerCase(Locale.ROOT));
 	}
 
 	/**

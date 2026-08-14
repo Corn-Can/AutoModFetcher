@@ -11,7 +11,7 @@ import net.minecraft.network.PacketByteBuf;
  * <p>{@code unresolved} lists file names the server could not find a download URL for.
  * The client can only tell the player to install those by hand.
  */
-public record ModManifest(List<ModEntry> entries, List<String> unresolved) {
+public record ModManifest(List<ModEntry> entries, List<ManualEntry> unresolved) {
 	public static final ModManifest EMPTY = new ModManifest(List.of(), List.of());
 
 	public boolean isEmpty() {
@@ -27,8 +27,8 @@ public record ModManifest(List<ModEntry> entries, List<String> unresolved) {
 
 		buf.writeVarInt(unresolved.size());
 
-		for (String fileName : unresolved) {
-			buf.writeString(fileName);
+		for (ManualEntry entry : unresolved) {
+			entry.write(buf);
 		}
 	}
 
@@ -41,10 +41,10 @@ public record ModManifest(List<ModEntry> entries, List<String> unresolved) {
 		}
 
 		int unresolvedCount = buf.readVarInt();
-		List<String> unresolved = new ArrayList<>(unresolvedCount);
+		List<ManualEntry> unresolved = new ArrayList<>(unresolvedCount);
 
 		for (int i = 0; i < unresolvedCount; i++) {
-			unresolved.add(buf.readString());
+			unresolved.add(ManualEntry.read(buf));
 		}
 
 		return new ModManifest(List.copyOf(entries), List.copyOf(unresolved));
