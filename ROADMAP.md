@@ -37,11 +37,31 @@
 
 AutoModFetcher 在這之後負責的是**後續更新**，而不是初次安裝——那才是它真正擅長的事。
 
-### 1.2 匯出 CurseForge 整合包
+### 1.2 匯出 CurseForge 整合包 ★ 與 1.1 同等重要，不是備案
 
-同樣的東西，給用 CurseForge 啟動器的玩家。格式是 `manifest.json`。
+`.mrpack` **不能**涵蓋所有人。實際支援情況：
 
-### 1.3 `/automodfetcher export` 指令
+| 啟動器 | `.mrpack` |
+|---|---|
+| Modrinth App / Prism / ATLauncher / GDLauncher | ✅ 原生支援 |
+| CurseForge App | ❌ 只吃自己的 `manifest.json` 格式 |
+| 官方 Minecraft 啟動器 | ❌ 不支援任何整合包格式 |
+
+所以 1.1 和 1.2 是**兩種格式都要出**，不是先做一個再看看。
+
+### 1.3 官方啟動器玩家：整合包幫不了他們
+
+官方啟動器沒有「整合包」這個概念——這不是支援得差，是功能不存在。而那正是最沒經驗、最需要「無腦」的那群玩家。
+
+**對他們來說 AutoModFetcher 不是輔助，是唯一解。** 能壓縮到的極限是：
+
+1. 跑一次 Fabric 官方安裝程式（一鍵）
+2. 把一個 zip 解壓進 `mods/`（一次拖曳，內含 Fabric API + AutoModFetcher）
+3. 之後全部自動
+
+所以要準備一個「起始包」zip，裡面只有這兩個 jar，附一頁圖文說明。這比整合包簡陋，但對這群人是唯一可行的路。
+
+### 1.4 `/automodfetcher export` 指令
 
 管理員在伺服器輸入指令就產生整合包檔案，不必手動整理。
 
