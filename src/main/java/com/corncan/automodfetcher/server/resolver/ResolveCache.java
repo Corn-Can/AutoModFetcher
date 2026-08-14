@@ -72,6 +72,10 @@ public class ResolveCache {
 	}
 
 	public void putHit(String sha1, Resolution resolution) {
+		if (isCurseForgeDerived(resolution.source(), resolution.url())) {
+			return;
+		}
+
 		Entry entry = new Entry();
 		entry.url = resolution.url();
 		entry.source = resolution.source();
@@ -83,10 +87,29 @@ public class ResolveCache {
 	}
 
 	public void putMiss(String sha1, String pageUrl) {
+		// Storing the miss would also skip the lookup that produced this page next time, and
+		// the page is CurseForge's to hand out, not ours to keep. Re-ask instead.
+		if (isCurseForgeDerived(null, pageUrl)) {
+			return;
+		}
+
 		Entry entry = new Entry();
 		entry.checkedAt = System.currentTimeMillis();
 		entry.pageUrl = pageUrl;
 		bySha1.put(sha1, entry);
+	}
+
+	/**
+	 * CurseForge's API terms forbid saving or caching what the API returns, so nothing that
+	 * came from it is written to disk. The cost is re-querying those files on every startup —
+	 * a handful of requests, since anything Modrinth can answer never reaches CurseForge.
+	 */
+	private static boolean isCurseForgeDerived(String source, String url) {
+		if (Resolution.SOURCE_CURSEFORGE.equals(source)) {
+			return true;
+		}
+
+		return url != null && url.toLowerCase(java.util.Locale.ROOT).contains("curseforge.com");
 	}
 
 	/**
