@@ -1,6 +1,7 @@
 package com.corncan.automodfetcher.client.gui;
 
 import com.corncan.automodfetcher.client.DownloadSession;
+import com.corncan.automodfetcher.client.GameRestarter;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -18,6 +19,8 @@ import net.minecraft.text.Text;
 public class ModSyncCompleteScreen extends Screen {
 	private final DownloadSession session;
 
+	private boolean restartFailed;
+
 	public ModSyncCompleteScreen(DownloadSession session) {
 		super(Text.translatable("automodfetcher.complete.title"));
 		this.session = session;
@@ -25,23 +28,48 @@ public class ModSyncCompleteScreen extends Screen {
 
 	@Override
 	protected void init() {
-		this.addDrawableChild(ButtonWidget.builder(
-				Text.translatable("automodfetcher.complete.quit"), button -> {
-					if (this.client != null) {
-						this.client.scheduleStop();
-					}
-				})
-				.dimensions(this.width / 2 - 154, this.height / 2 + 40, 150, 20)
-				.build());
+		int buttonY = this.height / 2 + 40;
 
-		this.addDrawableChild(ButtonWidget.builder(
-				Text.translatable("automodfetcher.complete.menu"), button -> {
-					if (this.client != null) {
-						this.client.setScreen(new TitleScreen());
-					}
-				})
-				.dimensions(this.width / 2 + 4, this.height / 2 + 40, 150, 20)
-				.build());
+		if (GameRestarter.isSupported()) {
+			this.addDrawableChild(ButtonWidget.builder(
+					Text.translatable("automodfetcher.complete.restart_now"), button -> restartNow())
+					.dimensions(this.width / 2 - 154, buttonY, 150, 20)
+					.build());
+
+			this.addDrawableChild(ButtonWidget.builder(
+					Text.translatable("automodfetcher.complete.quit"), button -> quit())
+					.dimensions(this.width / 2 + 4, buttonY, 150, 20)
+					.build());
+		} else {
+			this.addDrawableChild(ButtonWidget.builder(
+					Text.translatable("automodfetcher.complete.quit"), button -> quit())
+					.dimensions(this.width / 2 - 154, buttonY, 150, 20)
+					.build());
+
+			this.addDrawableChild(ButtonWidget.builder(
+					Text.translatable("automodfetcher.complete.menu"), button -> {
+						if (this.client != null) {
+							this.client.setScreen(new TitleScreen());
+						}
+					})
+					.dimensions(this.width / 2 + 4, buttonY, 150, 20)
+					.build());
+		}
+	}
+
+	private void quit() {
+		if (this.client != null) {
+			this.client.scheduleStop();
+		}
+	}
+
+	/** Only close this instance once the new one is actually up. */
+	private void restartNow() {
+		if (GameRestarter.restart()) {
+			quit();
+		} else {
+			restartFailed = true;
+		}
 	}
 
 	@Override
@@ -76,6 +104,12 @@ public class ModSyncCompleteScreen extends Screen {
 		context.drawCenteredTextWithShadow(this.textRenderer,
 				Text.translatable("automodfetcher.complete.restart"),
 				this.width / 2, line + 8, 0xFFFFD966);
+
+		if (restartFailed) {
+			context.drawCenteredTextWithShadow(this.textRenderer,
+					Text.translatable("automodfetcher.complete.restart_failed"),
+					this.width / 2, line + 20, 0xFFFF5555);
+		}
 	}
 
 	@Override
