@@ -40,6 +40,17 @@ public record SyncPlan(List<ModEntry> downloads, List<Blocked> blocked, List<Str
 	}
 
 	/**
+	 * Whether this plan can be carried out without telling the player anything.
+	 *
+	 * <p>Trust covers installing mods, not staying quiet about what we could not install.
+	 * Anything refused or needing a manual download is news, and news gets a screen even from
+	 * a server the player has stopped questioning.
+	 */
+	public boolean isFullyAutomatic() {
+		return hasActionableWork() && blocked.isEmpty() && manual.isEmpty();
+	}
+
+	/**
 	 * Identifies what is unavailable, so a remembered decision only stands while the situation
 	 * that prompted it is unchanged.
 	 */

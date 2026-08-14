@@ -9,6 +9,7 @@ import com.corncan.automodfetcher.client.ClientNetworking;
 import com.corncan.automodfetcher.client.LauncherDetection;
 import com.corncan.automodfetcher.client.SkipDecisions;
 import com.corncan.automodfetcher.client.SyncPlan;
+import com.corncan.automodfetcher.client.TrustedServers;
 import com.corncan.automodfetcher.util.ModPaths;
 import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
@@ -21,6 +22,7 @@ import net.minecraft.client.gui.screen.ConnectScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.CheckboxWidget;
 import net.minecraft.client.network.ServerAddress;
 import net.minecraft.client.network.ServerInfo;
 import net.minecraft.text.Text;
@@ -39,6 +41,7 @@ public class ModSyncConfirmScreen extends Screen {
 	private final LineList list = new LineList();
 
 	private boolean sharedInstall;
+	private CheckboxWidget rememberChoice;
 
 	public ModSyncConfirmScreen(SyncPlan plan, ClientConfig config) {
 		super(Text.translatable("automodfetcher.confirm.title"));
@@ -52,7 +55,7 @@ public class ModSyncConfirmScreen extends Screen {
 
 		int listTop = sharedInstall ? 60 : 52;
 		boolean showFolderButton = !plan.manual().isEmpty();
-		int listBottom = this.height - (showFolderButton ? 76 : 52);
+		int listBottom = this.height - (showFolderButton || plan.isFullyAutomatic() ? 76 : 52);
 		int listWidth = Math.min(360, this.width - 60);
 		int listX = (this.width - listWidth) / 2;
 
@@ -69,6 +72,14 @@ public class ModSyncConfirmScreen extends Screen {
 		}
 
 		int buttonY = this.height - 40;
+
+		// Offered rather than assumed. Agreeing once is not the same as agreeing always, and
+		// quietly turning the first into the second is not ours to do.
+		if (plan.isFullyAutomatic()) {
+			rememberChoice = this.addDrawableChild(new CheckboxWidget(this.width / 2 - 100,
+					this.height - 64, 200, 20,
+					Text.translatable("automodfetcher.confirm.remember"), false));
+		}
 
 		// Removals alone are still work to apply, so the action button must appear for them too.
 		if (plan.hasActionableWork()) {
@@ -191,6 +202,10 @@ public class ModSyncConfirmScreen extends Screen {
 	}
 
 	private void startDownload() {
+		if (rememberChoice != null && rememberChoice.isChecked()) {
+			TrustedServers.load().trust(ClientNetworking.serverKey());
+		}
+
 		DownloadSession session = new DownloadSession(plan, config);
 		session.start();
 

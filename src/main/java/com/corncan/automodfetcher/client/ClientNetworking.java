@@ -6,6 +6,7 @@ import java.util.function.Consumer;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.client.gui.ModSyncConfirmScreen;
+import com.corncan.automodfetcher.client.gui.ModSyncProgressScreen;
 import com.corncan.automodfetcher.network.Channels;
 import com.corncan.automodfetcher.network.ModManifest;
 
@@ -17,6 +18,7 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.client.network.ServerInfo;
 import net.minecraft.network.PacketByteBuf;
@@ -122,9 +124,18 @@ public final class ClientNetworking {
 						plan.downloads().size(), plan.blocked().size(), plan.deletions().size(),
 						plan.manual().size());
 
+				boolean automatic = plan.isFullyAutomatic()
+						&& TrustedServers.load().isTrusted(serverKey());
+
+				if (automatic) {
+					AutoModFetcher.LOGGER.info("Installing without asking; this server is trusted");
+				}
+
 				// Queue the screen before answering, so it is already waiting when the server
 				// ends the login in response.
-				client.execute(() -> ClientScreenQueue.show(new ModSyncConfirmScreen(plan, config)));
+				client.execute(() -> ClientScreenQueue.show(automatic
+						? startInstall(plan)
+						: new ModSyncConfirmScreen(plan, config)));
 
 				return respond(true);
 			} catch (Throwable e) {
@@ -136,6 +147,13 @@ public final class ClientNetworking {
 				return respond(false);
 			}
 		});
+	}
+
+	/** Straight to the progress screen: the player already answered this question once. */
+	private static Screen startInstall(SyncPlan plan) {
+		DownloadSession session = new DownloadSession(plan, config);
+		session.start();
+		return new ModSyncProgressScreen(session, plan.downloads());
 	}
 
 	private static PacketByteBuf respond(boolean needsUpdate) {
