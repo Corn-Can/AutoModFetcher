@@ -4,6 +4,7 @@ import com.corncan.automodfetcher.client.ClientConfig;
 import com.corncan.automodfetcher.client.ClientModIndex;
 import com.corncan.automodfetcher.client.ClientNetworking;
 import com.corncan.automodfetcher.client.ClientScreenQueue;
+import com.corncan.automodfetcher.client.LauncherDetection;
 import com.corncan.automodfetcher.client.PendingDiagnosis;
 import com.corncan.automodfetcher.client.gui.ModSyncDisconnectScreen;
 
@@ -18,6 +19,7 @@ public class AutoModFetcherClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		ClientConfig config = ClientConfig.load();
+		LauncherDetection.logOnce();
 
 		// Started now so the hash index is ready long before the player picks a server.
 		ClientModIndex.beginScan();
