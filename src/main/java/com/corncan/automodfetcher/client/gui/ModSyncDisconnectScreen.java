@@ -7,6 +7,7 @@ import com.corncan.automodfetcher.client.ClientConfig;
 import com.corncan.automodfetcher.client.PendingDiagnosis;
 import com.corncan.automodfetcher.client.SyncPlan;
 import com.corncan.automodfetcher.network.ManualEntry;
+import com.corncan.automodfetcher.util.ModPaths;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -64,10 +65,18 @@ public class ModSyncDisconnectScreen extends Screen {
 		causeY = REASON_TOP + reasonLines.count() * REASON_LINE_HEIGHT + 6;
 
 		int listTop = causeY + 16;
-		int listBottom = this.height - 46;
+		int listBottom = this.height - (diagnosis.manual().isEmpty() ? 46 : 70);
 
 		list.setBounds(listX, listTop, listWidth, listBottom - listTop);
 		list.setLines(buildLines());
+
+		if (!diagnosis.manual().isEmpty()) {
+			this.addDrawableChild(ButtonWidget.builder(
+					Text.translatable("automodfetcher.confirm.open_folder"),
+					button -> Util.getOperatingSystem().open(ModPaths.modsDir().toFile()))
+					.dimensions(this.width / 2 - 100, this.height - 60, 200, 20)
+					.build());
+		}
 
 		this.addDrawableChild(ButtonWidget.builder(
 				Text.translatable("automodfetcher.confirm.back"), button -> close())

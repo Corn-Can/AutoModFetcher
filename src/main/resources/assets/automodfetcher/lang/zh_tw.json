@@ -36,5 +36,7 @@
 	"automodfetcher.kicked.title": "與伺服器的連線中斷",
 	"automodfetcher.kicked.server_said": "伺服器訊息：%s",
 	"automodfetcher.kicked.likely_cause": "可能的原因：",
-	"automodfetcher.kicked.missing": "你缺少伺服器有的這些模組："
+	"automodfetcher.kicked.missing": "你缺少伺服器有的這些模組：",
+	"automodfetcher.confirm.open_folder": "開啟 mods 資料夾",
+	"automodfetcher.confirm.shared_install": "這些模組也會出現在你其他的世界中——建議為這台伺服器設定獨立的遊戲目錄。"
 }

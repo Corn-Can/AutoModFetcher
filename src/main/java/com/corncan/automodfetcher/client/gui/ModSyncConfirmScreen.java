@@ -6,8 +6,10 @@ import java.util.List;
 import com.corncan.automodfetcher.client.ClientConfig;
 import com.corncan.automodfetcher.client.DownloadSession;
 import com.corncan.automodfetcher.client.ClientNetworking;
+import com.corncan.automodfetcher.client.LauncherDetection;
 import com.corncan.automodfetcher.client.SkipDecisions;
 import com.corncan.automodfetcher.client.SyncPlan;
+import com.corncan.automodfetcher.util.ModPaths;
 import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 
@@ -36,6 +38,8 @@ public class ModSyncConfirmScreen extends Screen {
 	private final ClientConfig config;
 	private final LineList list = new LineList();
 
+	private boolean sharedInstall;
+
 	public ModSyncConfirmScreen(SyncPlan plan, ClientConfig config) {
 		super(Text.translatable("automodfetcher.confirm.title"));
 		this.plan = plan;
@@ -44,13 +48,25 @@ public class ModSyncConfirmScreen extends Screen {
 
 	@Override
 	protected void init() {
-		int listTop = 52;
-		int listBottom = this.height - 52;
+		sharedInstall = LauncherDetection.sharesTheDefaultInstall();
+
+		int listTop = sharedInstall ? 60 : 52;
+		boolean showFolderButton = !plan.manual().isEmpty();
+		int listBottom = this.height - (showFolderButton ? 76 : 52);
 		int listWidth = Math.min(360, this.width - 60);
 		int listX = (this.width - listWidth) / 2;
 
 		list.setBounds(listX, listTop, listWidth, listBottom - listTop);
 		list.setLines(buildLines());
+
+		// Knowing which folder is one thing; finding it is another, and players on the vanilla
+		// launcher have no app to open it for them.
+		if (showFolderButton) {
+			this.addDrawableChild(ButtonWidget.builder(
+					Text.translatable("automodfetcher.confirm.open_folder"), button -> openModsFolder())
+					.dimensions(this.width / 2 - 100, this.height - 64, 200, 20)
+					.build());
+		}
 
 		int buttonY = this.height - 40;
 
@@ -170,6 +186,10 @@ public class ModSyncConfirmScreen extends Screen {
 		ConnectScreen.connect(new TitleScreen(), this.client, ServerAddress.parse(server.address), server, false);
 	}
 
+	private void openModsFolder() {
+		Util.getOperatingSystem().open(ModPaths.modsDir().toFile());
+	}
+
 	private void startDownload() {
 		DownloadSession session = new DownloadSession(plan, config);
 		session.start();
@@ -198,6 +218,12 @@ public class ModSyncConfirmScreen extends Screen {
 			context.drawCenteredTextWithShadow(this.textRenderer,
 					Text.translatable("automodfetcher.confirm.connect_anyway_warning"),
 					this.width / 2, 32, 0xFFFF9955);
+		}
+
+		if (sharedInstall) {
+			context.drawCenteredTextWithShadow(this.textRenderer,
+					Text.translatable("automodfetcher.confirm.shared_install"),
+					this.width / 2, 46, 0xFFFF9955);
 		}
 
 		list.render(context, this.textRenderer, mouseX, mouseY);

@@ -36,5 +36,7 @@
 	"automodfetcher.kicked.title": "Disconnected from the server",
 	"automodfetcher.kicked.server_said": "The server said: %s",
 	"automodfetcher.kicked.likely_cause": "This may be why:",
-	"automodfetcher.kicked.missing": "You are missing mods the server has:"
+	"automodfetcher.kicked.missing": "You are missing mods the server has:",
+	"automodfetcher.confirm.open_folder": "Open mods folder",
+	"automodfetcher.confirm.shared_install": "These will load in all your other worlds too — give this server its own game directory."
 }

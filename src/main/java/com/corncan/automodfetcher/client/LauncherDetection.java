@@ -1,5 +1,8 @@
 package com.corncan.automodfetcher.client;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 
 import com.corncan.automodfetcher.util.ModPaths;
@@ -94,14 +97,60 @@ public enum LauncherDetection {
 		return VANILLA;
 	}
 
+	/**
+	 * Whether mods installed here will show up in every other profile the player has.
+	 *
+	 * <p>The vanilla launcher can give an installation its own game directory, but almost
+	 * nobody does. Left at the default, the forty mods someone installs to join one server
+	 * also load into their singleplayer worlds and every other server — and they will have no
+	 * idea why. Worth a sentence before we put anything in that folder.
+	 */
+	public static boolean sharesTheDefaultInstall() {
+		if (detect() != VANILLA) {
+			return false;
+		}
+
+		Path defaultDir = defaultMinecraftDir();
+
+		if (defaultDir == null) {
+			return false;
+		}
+
+		Path gameDir = FabricLoader.getInstance().getGameDir().toAbsolutePath().normalize();
+
+		try {
+			return Files.isSameFile(defaultDir, gameDir);
+		} catch (IOException e) {
+			// One of them does not exist, so a path comparison is the best available answer.
+			return defaultDir.toAbsolutePath().normalize().equals(gameDir);
+		}
+	}
+
+	private static Path defaultMinecraftDir() {
+		String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+		String home = System.getProperty("user.home", "");
+
+		if (os.contains("win")) {
+			String appData = System.getenv("APPDATA");
+			return appData != null ? Path.of(appData, ".minecraft") : null;
+		}
+
+		if (os.contains("mac")) {
+			return Path.of(home, "Library", "Application Support", "minecraft");
+		}
+
+		return Path.of(home, ".minecraft");
+	}
+
 	/** Written to the log once at startup: the first thing worth knowing in a bug report. */
 	public static void logOnce() {
 		LauncherDetection detected = detect();
 
 		com.corncan.automodfetcher.AutoModFetcher.LOGGER.info(
-				"Launcher looks like {} (brand={}, gameDir={})",
+				"Launcher looks like {} (brand={}, sharedInstall={}, gameDir={})",
 				detected.displayName(),
 				System.getProperty("minecraft.launcher.brand", "unset"),
+				sharesTheDefaultInstall(),
 				FabricLoader.getInstance().getGameDir().toAbsolutePath());
 	}
 }
