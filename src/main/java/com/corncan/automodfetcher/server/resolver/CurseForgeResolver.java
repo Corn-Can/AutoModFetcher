@@ -46,6 +46,78 @@ public final class CurseForgeResolver {
 		}
 	}
 
+	/** A file's identity on CurseForge, which is how a CurseForge modpack refers to it. */
+	public record ProjectFile(int projectId, int fileId) {
+	}
+
+	/**
+	 * Identifies files on CurseForge without caring whether they can be downloaded from it.
+	 *
+	 * <p>A CurseForge modpack names files by project and file id, and its app fetches them
+	 * itself — so a mod whose author disabled third-party downloads still works there, even
+	 * though nothing outside CurseForge may serve it. That makes this the only route by which
+	 * such a mod reaches a player automatically.
+	 */
+	public static Map<String, ProjectFile> identify(HttpClient http, String apiKey,
+			Map<Long, String> fingerprintToSha1) {
+		Map<String, ProjectFile> found = new HashMap<>();
+
+		if (apiKey == null || apiKey.isBlank() || fingerprintToSha1.isEmpty()) {
+			return found;
+		}
+
+		try {
+			JsonObject body = new JsonObject();
+			JsonArray fingerprints = new JsonArray();
+			fingerprintToSha1.keySet().forEach(fingerprints::add);
+			body.add("fingerprints", fingerprints);
+
+			HttpResponse<String> response = http.send(post(FINGERPRINTS, apiKey, body),
+					HttpResponse.BodyHandlers.ofString());
+
+			if (response.statusCode() != 200) {
+				AutoModFetcher.LOGGER.warn("CurseForge returned HTTP {} identifying {} file(s)",
+						response.statusCode(), fingerprintToSha1.size());
+				return found;
+			}
+
+			JsonObject json = Json.GSON.fromJson(response.body(), JsonObject.class);
+
+			if (json == null || !json.has("data") || !json.get("data").isJsonObject()) {
+				return found;
+			}
+
+			JsonElement matches = json.getAsJsonObject("data").get("exactMatches");
+
+			if (matches == null || !matches.isJsonArray()) {
+				return found;
+			}
+
+			for (JsonElement matchElement : matches.getAsJsonArray()) {
+				if (!matchElement.isJsonObject()) {
+					continue;
+				}
+
+				JsonElement fileElement = matchElement.getAsJsonObject().get("file");
+
+				if (fileElement == null || !fileElement.isJsonObject()) {
+					continue;
+				}
+
+				JsonObject file = fileElement.getAsJsonObject();
+				String sha1 = identifySha1(file, fingerprintToSha1);
+
+				if (sha1 != null && file.has("modId") && file.has("id")) {
+					found.put(sha1, new ProjectFile(file.get("modId").getAsInt(), file.get("id").getAsInt()));
+				}
+			}
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.warn("CurseForge identification failed", e);
+		}
+
+		return found;
+	}
+
 	/**
 	 * @param fingerprintToSha1 maps each file's CurseForge fingerprint back to its SHA-1,
 	 *                          which is the key the rest of the pipeline works in
