@@ -35,6 +35,15 @@ public class ClientConfig {
 
 	public int maxConcurrentDownloads = 3;
 
+	/**
+	 * Extra attempts per file after the first one fails.
+	 *
+	 * <p>A CDN dropping one TLS handshake is enough to cost a player a whole cycle of
+	 * restarting, reconnecting and answering the prompt again — for a fault that was over
+	 * before they noticed it.
+	 */
+	public int downloadRetries = 2;
+
 	public static ClientConfig load() {
 		Path path = ModPaths.configDir().resolve(FILE_NAME);
 		ClientConfig config = Json.read(path, ClientConfig.class, ClientConfig::new);

@@ -117,25 +117,61 @@ public class DownloadSession {
 		}
 	}
 
-	private void runOne(ModEntry entry) {
-		if (cancelled) {
-			setStatus(entry, Status.FAILED, "cancelled");
-			return;
+	/** Refusing a host is a decision, not a fault, so it is never worth trying again. */
+	private static final class BlockedHostException extends IOException {
+		BlockedHostException(String message) {
+			super(message);
 		}
+	}
 
-		setStatus(entry, Status.DOWNLOADING, null);
+	private void runOne(ModEntry entry) {
+		int attempts = 1 + Math.max(0, config.downloadRetries);
 
+		for (int attempt = 1; attempt <= attempts; attempt++) {
+			if (cancelled) {
+				setStatus(entry, Status.FAILED, "cancelled");
+				return;
+			}
+
+			setStatus(entry, Status.DOWNLOADING, null);
+
+			try {
+				install(entry);
+				return;
+			} catch (BlockedHostException e) {
+				fail(entry, e);
+				return;
+			} catch (Exception e) {
+				if (attempt == attempts) {
+					fail(entry, e);
+					return;
+				}
+
+				AutoModFetcher.LOGGER.warn("Attempt {} of {} for {} failed ({}); retrying",
+						attempt, attempts, entry.fileName(), e.getMessage());
+
+				if (!backOff(attempt)) {
+					setStatus(entry, Status.FAILED, "cancelled");
+					return;
+				}
+			}
+		}
+	}
+
+	private void install(ModEntry entry) throws Exception {
 		Path temp = ModPaths.downloadTempDir().resolve(entry.fileName() + ".part");
+		long before = downloadedBytes.get();
 
 		try {
 			String sha512 = fetch(entry, temp);
 
 			if (!sha512.equalsIgnoreCase(entry.sha512())) {
+				// Retried like any other fault: a truncated transfer looks the same as a
+				// tampered one from here, and the second attempt is verified just as strictly.
 				throw new IOException("Checksum mismatch");
 			}
 
-			Path target = ModPaths.modsDir().resolve(entry.fileName());
-			Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+			Files.move(temp, ModPaths.modsDir().resolve(entry.fileName()), StandardCopyOption.REPLACE_EXISTING);
 
 			synchronized (completed) {
 				completed.put(entry.fileName(), sha512.toLowerCase(Locale.ROOT));
@@ -144,14 +180,35 @@ public class DownloadSession {
 			setStatus(entry, Status.DONE, null);
 			AutoModFetcher.LOGGER.info("Installed {}", entry.fileName());
 		} catch (Exception e) {
-			setStatus(entry, Status.FAILED, e.getMessage() != null ? e.getMessage() : e.toString());
-			AutoModFetcher.LOGGER.warn("Failed to download {}", entry.fileName(), e);
+			// Roll the progress bar back to where this attempt started, or a retry would
+			// count the same bytes twice and drive the bar past the end.
+			downloadedBytes.set(before);
+			deleteQuietly(temp);
+			throw e;
+		}
+	}
 
-			try {
-				Files.deleteIfExists(temp);
-			} catch (IOException suppressed) {
-				AutoModFetcher.LOGGER.debug("Could not clean up {}", temp, suppressed);
-			}
+	private void fail(ModEntry entry, Exception cause) {
+		setStatus(entry, Status.FAILED, cause.getMessage() != null ? cause.getMessage() : cause.toString());
+		AutoModFetcher.LOGGER.warn("Failed to download {}", entry.fileName(), cause);
+	}
+
+	/** @return false if the wait was cut short by a cancel */
+	private boolean backOff(int attempt) {
+		try {
+			Thread.sleep(Math.min(8000L, 1000L * (1L << (attempt - 1))));
+			return !cancelled;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+	}
+
+	private void deleteQuietly(Path path) {
+		try {
+			Files.deleteIfExists(path);
+		} catch (IOException e) {
+			AutoModFetcher.LOGGER.debug("Could not clean up {}", path, e);
 		}
 	}
 
@@ -161,7 +218,7 @@ public class DownloadSession {
 
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
 			if (!config.isAllowed(url)) {
-				throw new IOException("Blocked host: " + ClientConfig.hostOf(url));
+				throw new BlockedHostException("Blocked host: " + ClientConfig.hostOf(url));
 			}
 
 			HttpRequest request = HttpRequest.newBuilder(URI.create(url))
@@ -359,5 +416,28 @@ public class DownloadSession {
 
 	public int deletionCount() {
 		return plan.deletions().size();
+	}
+
+	public ClientConfig config() {
+		return config;
+	}
+
+	/** Anything that did not finish, whether it failed or was never reached. */
+	public boolean hasUnfinishedWork() {
+		return !remainingWork().downloads().isEmpty();
+	}
+
+	/**
+	 * What is left to do, as a plan a fresh session can run.
+	 *
+	 * <p>Files already installed are dropped so a retry does not fetch them twice. Removals
+	 * are carried over because a cancelled session never queued them.
+	 */
+	public SyncPlan remainingWork() {
+		List<ModEntry> unfinished = plan.downloads().stream()
+				.filter(entry -> statusOf(entry.fileName()) != Status.DONE)
+				.toList();
+
+		return new SyncPlan(unfinished, List.of(), plan.deletions(), List.of());
 	}
 }

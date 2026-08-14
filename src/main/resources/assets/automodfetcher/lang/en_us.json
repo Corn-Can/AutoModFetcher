@@ -38,5 +38,8 @@
 	"automodfetcher.kicked.likely_cause": "This may be why:",
 	"automodfetcher.kicked.missing": "You are missing mods the server has:",
 	"automodfetcher.confirm.open_folder": "Open mods folder",
-	"automodfetcher.confirm.shared_install": "These will load in all your other worlds too — give this server its own game directory."
+	"automodfetcher.confirm.shared_install": "These will load in all your other worlds too — give this server its own game directory.",
+	"automodfetcher.confirm.remember": "Don't ask again for this server",
+	"automodfetcher.complete.retry": "Try again",
+	"automodfetcher.complete.incomplete": "Some mods are still missing — try again, or go back and pick another server."
 }
