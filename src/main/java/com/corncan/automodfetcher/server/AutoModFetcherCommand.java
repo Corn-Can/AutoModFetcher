@@ -57,6 +57,9 @@ public final class AutoModFetcherCommand {
 
 			warnAbout(source, result.omitted(),
 					" are not on CurseForge, so the CurseForge pack cannot include them: ");
+			warnAbout(source, result.overCap(),
+					" were not looked up — the export hit curseforgeLookupLimit. Raise it in "
+							+ ServerSyncConfig.FILE_NAME + " to include them: ");
 
 			return 1;
 		} catch (Exception e) {

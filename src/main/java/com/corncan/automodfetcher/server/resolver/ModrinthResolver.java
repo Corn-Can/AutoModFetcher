@@ -14,6 +14,7 @@ import java.util.Map;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.util.Json;
+import com.corncan.automodfetcher.util.VersionMatching;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -157,7 +158,7 @@ public final class ModrinthResolver {
 				JsonObject version = versionElement.getAsJsonObject();
 				JsonElement number = version.get("version_number");
 
-				if (number == null || !versionMatches(modVersion, number.getAsString())) {
+				if (number == null || !VersionMatching.matches(modVersion, number.getAsString())) {
 					continue;
 				}
 
@@ -224,48 +225,6 @@ public final class ModrinthResolver {
 
 		return Resolution.rebuild(chosen.get("url").getAsString(), Resolution.SOURCE_MODRINTH_REBUILD,
 				sha1.getAsString(), sha512.getAsString(), size.getAsLong());
-	}
-
-	/**
-	 * Platforms decorate version numbers ({@code 14.1.20+fabric-1.20.1},
-	 * {@code mc1.20.1-0.11.4}), so the jar's own version has to be matched as a whole token
-	 * rather than by a plain substring search — otherwise {@code 1.0} would match {@code 11.0}.
-	 */
-	static boolean versionMatches(String jarVersion, String candidate) {
-		if (candidate == null) {
-			return false;
-		}
-
-		String needle = jarVersion.toLowerCase(Locale.ROOT);
-		String haystack = candidate.toLowerCase(Locale.ROOT);
-
-		if (haystack.equals(needle)) {
-			return true;
-		}
-
-		int from = 0;
-
-		while (true) {
-			int at = haystack.indexOf(needle, from);
-
-			if (at < 0) {
-				return false;
-			}
-
-			int end = at + needle.length();
-			boolean leftClear = at == 0 || !isVersionChar(haystack.charAt(at - 1));
-			boolean rightClear = end == haystack.length() || !isVersionChar(haystack.charAt(end));
-
-			if (leftClear && rightClear) {
-				return true;
-			}
-
-			from = at + 1;
-		}
-	}
-
-	private static boolean isVersionChar(char value) {
-		return Character.isLetterOrDigit(value) || value == '.';
 	}
 
 	/**

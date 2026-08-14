@@ -46,6 +46,16 @@ public class ServerSyncConfig {
 	 */
 	public String selfDownloadUrl = "";
 
+	/**
+	 * How many mods an export may look up on CurseForge by name when fingerprinting fails.
+	 *
+	 * <p>Each one costs two requests. CurseForge does not publish its rate limits and reserves
+	 * the right to require a licensing agreement above an undisclosed quota, so a large mods
+	 * folder sourced entirely from elsewhere is capped rather than allowed to fire hundreds of
+	 * requests. Anything beyond the cap is reported so the operator can decide.
+	 */
+	public int curseforgeLookupLimit = 50;
+
 	public static ServerSyncConfig load() {
 		Path path = ModPaths.configDir().resolve(FILE_NAME);
 		ServerSyncConfig config = Json.read(path, ServerSyncConfig.class, ServerSyncConfig::new);

@@ -1,9 +1,11 @@
 package com.corncan.automodfetcher.server.resolver;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -12,6 +14,7 @@ import java.util.Map;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.util.Json;
+import com.corncan.automodfetcher.util.VersionMatching;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -31,6 +34,10 @@ public final class CurseForgeResolver {
 
 	/** CurseForge hash algo ids: 1 = SHA-1, 2 = MD5. */
 	private static final int ALGO_SHA1 = 1;
+
+	private static final int MINECRAFT_GAME_ID = 432;
+	private static final int MOD_CLASS_ID = 6;
+	private static final int FABRIC_LOADER_TYPE = 4;
 
 	private CurseForgeResolver() {
 	}
@@ -116,6 +123,120 @@ public final class CurseForgeResolver {
 		}
 
 		return found;
+	}
+
+	/**
+	 * Finds a mod on CurseForge by its own id and version rather than by fingerprint.
+	 *
+	 * <p>A fingerprint identifies one exact file, so a jar downloaded from Modrinth never
+	 * matches CurseForge's build of the same release — the mod is reported as absent from a
+	 * site that does host it. This is the same problem the Modrinth lookup had in reverse,
+	 * and the same shape of answer: ask for the project, then pick the release.
+	 *
+	 * <p>Costs two requests, which is why callers cap how many of these they make.
+	 *
+	 * @return the project and file ids, or null if the mod, the release or the loader is absent
+	 */
+	public static ProjectFile identifyBySlug(HttpClient http, String apiKey, String modId,
+			String modVersion, String gameVersion) {
+		if (modId == null || modId.isBlank() || modVersion == null || modVersion.isBlank()) {
+			return null;
+		}
+
+		try {
+			Integer projectId = findProjectId(http, apiKey, modId);
+
+			if (projectId == null) {
+				return null;
+			}
+
+			Integer fileId = findFileId(http, apiKey, projectId, modVersion, gameVersion);
+
+			if (fileId == null) {
+				return null;
+			}
+
+			AutoModFetcher.LOGGER.info("Matched {} {} to CurseForge project {}", modId, modVersion, projectId);
+			return new ProjectFile(projectId, fileId);
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.debug("CurseForge lookup by slug failed for {}", modId, e);
+			return null;
+		}
+	}
+
+	/** Fabric mod ids and CurseForge slugs line up often enough to be worth trying first. */
+	private static Integer findProjectId(HttpClient http, String apiKey, String slug) throws Exception {
+		URI uri = URI.create("https://api.curseforge.com/v1/mods/search?gameId=" + MINECRAFT_GAME_ID
+				+ "&classId=" + MOD_CLASS_ID
+				+ "&slug=" + URLEncoder.encode(slug, StandardCharsets.UTF_8));
+
+		JsonObject json = getJson(http, apiKey, uri);
+
+		if (json == null || !json.has("data") || !json.get("data").isJsonArray()) {
+			return null;
+		}
+
+		JsonArray data = json.getAsJsonArray("data");
+
+		if (data.isEmpty() || !data.get(0).isJsonObject()) {
+			return null;
+		}
+
+		JsonObject mod = data.get(0).getAsJsonObject();
+		return mod.has("id") ? mod.get("id").getAsInt() : null;
+	}
+
+	private static Integer findFileId(HttpClient http, String apiKey, int projectId, String modVersion,
+			String gameVersion) throws Exception {
+		URI uri = URI.create("https://api.curseforge.com/v1/mods/" + projectId + "/files"
+				+ "?gameVersion=" + URLEncoder.encode(gameVersion, StandardCharsets.UTF_8)
+				+ "&modLoaderType=" + FABRIC_LOADER_TYPE + "&pageSize=50");
+
+		JsonObject json = getJson(http, apiKey, uri);
+
+		if (json == null || !json.has("data") || !json.get("data").isJsonArray()) {
+			return null;
+		}
+
+		for (JsonElement fileElement : json.getAsJsonArray("data")) {
+			if (!fileElement.isJsonObject()) {
+				continue;
+			}
+
+			JsonObject file = fileElement.getAsJsonObject();
+
+			// The version rarely appears verbatim; it is embedded in the file or display name.
+			if (VersionMatching.matchesFileName(modVersion, textOf(file, "fileName"))
+					|| VersionMatching.matchesFileName(modVersion, textOf(file, "displayName"))) {
+				return file.has("id") ? file.get("id").getAsInt() : null;
+			}
+		}
+
+		return null;
+	}
+
+	private static JsonObject getJson(HttpClient http, String apiKey, URI uri) throws Exception {
+		HttpRequest request = HttpRequest.newBuilder(uri)
+				.header("Accept", "application/json")
+				.header("x-api-key", apiKey)
+				.header("User-Agent", AutoModFetcher.userAgent())
+				.timeout(Duration.ofSeconds(30))
+				.GET()
+				.build();
+
+		HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+
+		if (response.statusCode() != 200) {
+			AutoModFetcher.LOGGER.debug("CurseForge returned HTTP {} for {}", response.statusCode(), uri);
+			return null;
+		}
+
+		return Json.GSON.fromJson(response.body(), JsonObject.class);
+	}
+
+	private static String textOf(JsonObject object, String key) {
+		JsonElement value = object.get(key);
+		return value != null && !value.isJsonNull() ? value.getAsString() : null;
 	}
 
 	/**

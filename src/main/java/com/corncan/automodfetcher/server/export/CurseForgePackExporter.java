@@ -44,7 +44,11 @@ public final class CurseForgePackExporter {
 	private CurseForgePackExporter() {
 	}
 
-	public record Result(Path file, int included, List<String> omitted) {
+	/**
+	 * @param omitted    mods CurseForge does not appear to host
+	 * @param overCap    mods left unchecked because the lookup budget ran out
+	 */
+	public record Result(Path file, int included, List<String> omitted, List<String> overCap) {
 	}
 
 	public static Result export(ServerSyncConfig config) throws IOException {
@@ -66,6 +70,10 @@ public final class CurseForgePackExporter {
 
 		JsonArray files = new JsonArray();
 		List<String> omitted = new ArrayList<>();
+		List<String> overCap = new ArrayList<>();
+
+		String gameVersion = AutoModFetcher.minecraftVersion();
+		int budget = Math.max(0, config.curseforgeLookupLimit);
 
 		for (ScannedMod mod : mods) {
 			if (mod.side() == ModSide.SERVER) {
@@ -73,6 +81,19 @@ public final class CurseForgePackExporter {
 			}
 
 			CurseForgeResolver.ProjectFile identity = identified.get(mod.sha1());
+
+			if (identity == null) {
+				// The fingerprint identifies a file, not a mod, so a jar taken from another
+				// site misses even when CurseForge hosts the very same release. Ask by name.
+				if (budget == 0) {
+					overCap.add(mod.fileName());
+					continue;
+				}
+
+				budget--;
+				identity = CurseForgeResolver.identifyBySlug(http, config.curseforgeApiKey, mod.modId(),
+						mod.modVersion(), gameVersion);
+			}
 
 			if (identity == null) {
 				omitted.add(mod.fileName());
@@ -88,7 +109,7 @@ public final class CurseForgePackExporter {
 
 		Path target = writeZip(buildManifest(files, config));
 
-		return new Result(target, files.size(), omitted);
+		return new Result(target, files.size(), omitted, overCap);
 	}
 
 	private static Map<Long, String> fingerprint(List<ScannedMod> mods) {
