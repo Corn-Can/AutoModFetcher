@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "automodfetcher",
+	"version": "${version}",
+	"name": "AutoModFetcher",
+	"description": "Automatically syncs the mods a server requires. On join, the server sends its mod manifest; the client downloads whatever is missing and prompts for a restart.",
+	"authors": [
+		"CornCan"
+	],
+	"contact": {},
+	"license": "CC0-1.0",
+	"icon": "assets/automodfetcher/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.corncan.automodfetcher.AutoModFetcher"
+		],
+		"client": [
+			"com.corncan.automodfetcher.AutoModFetcherClient"
+		],
+		"preLaunch": [
+			"com.corncan.automodfetcher.PendingOpsApplier"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": "~1.20.1",
+		"java": ">=17",
+		"fabric-api": "*"
+	}
+}
