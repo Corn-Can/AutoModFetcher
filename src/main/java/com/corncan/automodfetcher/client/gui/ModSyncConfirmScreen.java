@@ -156,6 +156,7 @@ public class ModSyncConfirmScreen extends Screen {
 	private void connectAnyway() {
 		SkipDecisions decisions = SkipDecisions.load();
 		decisions.accept(ClientNetworking.serverKey(), plan.unavailableSignature());
+		ClientNetworking.rememberDiagnosis(plan);
 
 		ServerInfo server = ClientNetworking.lastServer();
 
@@ -191,6 +192,12 @@ public class ModSyncConfirmScreen extends Screen {
 					Text.translatable("automodfetcher.confirm.subtitle",
 							Sizes.format(plan.totalDownloadBytes())),
 					this.width / 2, 32, 0xFFA0A0A0);
+		} else {
+			// Joining without a mod the server needs ends in an immediate, unexplained drop.
+			// Saying so here is the only warning the player will get.
+			context.drawCenteredTextWithShadow(this.textRenderer,
+					Text.translatable("automodfetcher.confirm.connect_anyway_warning"),
+					this.width / 2, 32, 0xFFFF9955);
 		}
 
 		list.render(context, this.textRenderer, mouseX, mouseY);

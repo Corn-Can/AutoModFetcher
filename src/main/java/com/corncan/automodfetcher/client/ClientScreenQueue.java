@@ -1,10 +1,13 @@
 package com.corncan.automodfetcher.client;
 
+import java.util.function.Function;
+
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.DisconnectedScreen;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.text.Text;
 
 /**
  * Puts our screen up once the server has ended the login.
@@ -23,6 +26,7 @@ public final class ClientScreenQueue {
 	private static final int GUARD_TICKS = 200;
 
 	private static volatile Screen pending;
+	private static volatile Function<Text, Screen> pendingFactory;
 	private static int guard;
 
 	private ClientScreenQueue() {
@@ -30,24 +34,41 @@ public final class ClientScreenQueue {
 
 	public static void show(Screen screen) {
 		pending = screen;
+		pendingFactory = null;
+		guard = GUARD_TICKS;
+	}
+
+	/**
+	 * Builds the screen from the disconnect reason once it is known, so ours can quote what
+	 * the server actually said instead of discarding it.
+	 */
+	public static void showWithReason(Function<Text, Screen> factory) {
+		pending = null;
+		pendingFactory = factory;
 		guard = GUARD_TICKS;
 	}
 
 	public static void tick(MinecraftClient client) {
 		Screen target = pending;
+		Function<Text, Screen> factory = pendingFactory;
 
-		if (target == null) {
+		if (target == null && factory == null) {
 			return;
 		}
 
-		if (client.currentScreen instanceof DisconnectedScreen) {
-			client.setScreen(target);
-			pending = null;
+		if (client.currentScreen instanceof DisconnectedScreen disconnected) {
+			client.setScreen(factory != null ? factory.apply(disconnected.reason) : target);
+			clear();
 			return;
 		}
 
 		if (guard-- <= 0) {
-			pending = null;
+			clear();
 		}
+	}
+
+	private static void clear() {
+		pending = null;
+		pendingFactory = null;
 	}
 }

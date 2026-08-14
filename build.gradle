@@ -19,6 +19,8 @@ repositories {
 }
 
 loom {
+	accessWidenerPath = file("src/main/resources/automodfetcher.accesswidener")
+
 	runs {
 		// Separate game directories, otherwise the dev client and dev server share one
 		// mods folder and there is never anything to sync.

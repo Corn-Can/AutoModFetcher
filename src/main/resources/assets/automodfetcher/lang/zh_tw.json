@@ -31,5 +31,10 @@
 	"automodfetcher.complete.menu": "回主選單",
 	"automodfetcher.confirm.connect_anyway": "仍要連線",
 	"automodfetcher.complete.restart_now": "立即重新啟動",
-	"automodfetcher.complete.restart_failed": "無法自動重啟——請手動關閉並重新開啟遊戲。"
+	"automodfetcher.complete.restart_failed": "無法自動重啟——請手動關閉並重新開啟遊戲。",
+	"automodfetcher.confirm.connect_anyway_warning": "若伺服器需要這些模組，你可能一進去就被中斷連線。",
+	"automodfetcher.kicked.title": "與伺服器的連線中斷",
+	"automodfetcher.kicked.server_said": "伺服器訊息：%s",
+	"automodfetcher.kicked.likely_cause": "可能的原因：",
+	"automodfetcher.kicked.missing": "你缺少伺服器有的這些模組："
 }

@@ -22,6 +22,7 @@
 			"com.corncan.automodfetcher.PendingOpsApplier"
 		]
 	},
+	"accessWidener": "automodfetcher.accesswidener",
 	"depends": {
 		"fabricloader": ">=0.16.0",
 		"minecraft": "~1.20.1",

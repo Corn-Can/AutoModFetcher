@@ -1,5 +1,6 @@
 package com.corncan.automodfetcher.client;
 
+import java.net.SocketAddress;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -27,6 +28,23 @@ public final class ClientNetworking {
 	/** Remembered so the confirm screen can reconnect to the server we were just turned away from. */
 	private static volatile ServerInfo lastServer;
 
+	/** Identifies the server even when it has no entry, so a decision is always storable. */
+	private static volatile String lastServerKey;
+
+	/** Set when we let a player through knowing mods were missing; used to explain a drop. */
+	private static volatile PendingDiagnosis diagnosis;
+
+	public static PendingDiagnosis takeDiagnosis() {
+		PendingDiagnosis current = diagnosis;
+		diagnosis = null;
+		return current;
+	}
+
+	/** Called when the player themselves chose to go ahead without every mod. */
+	public static void rememberDiagnosis(SyncPlan plan) {
+		diagnosis = PendingDiagnosis.of(plan);
+	}
+
 	private ClientNetworking() {
 	}
 
@@ -34,10 +52,28 @@ public final class ClientNetworking {
 		return lastServer;
 	}
 
-	/** The key a skip decision is stored under, or null when we cannot identify the server. */
 	public static String serverKey() {
-		ServerInfo server = lastServer;
-		return server != null ? server.address : null;
+		return lastServerKey;
+	}
+
+	/**
+	 * The login handler knows which server it is talking to; {@code getCurrentServerEntry()}
+	 * does not yet, because the game only records that once a world is being joined. Reading
+	 * it here is why the access widener exists.
+	 */
+	private static void rememberServer(ClientLoginNetworkHandler handler) {
+		ServerInfo server = handler.serverInfo;
+		lastServer = server;
+
+		if (server != null && server.address != null) {
+			lastServerKey = server.address;
+			return;
+		}
+
+		// No entry to reconnect with, but the socket still names the server well enough to
+		// hang a decision on.
+		SocketAddress address = handler.connection.getAddress();
+		lastServerKey = address != null ? address.toString() : null;
 	}
 
 	public static void register(ClientConfig clientConfig) {
@@ -54,14 +90,10 @@ public final class ClientNetworking {
 		// Read the buffer here, on the netty thread: it is recycled the moment this method
 		// returns, so nothing may touch it from the async work below.
 		ModManifest manifest = ModManifest.read(buf);
-		lastServer = client.getCurrentServerEntry();
+		rememberServer(handler);
 
 		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved",
 				manifest.entries().size(), manifest.unresolved().size());
-
-		if (lastServer == null) {
-			AutoModFetcher.LOGGER.debug("No server entry for this connection; a skip cannot be remembered");
-		}
 
 		// Returning an unfinished future holds the login open until we have decided, which is
 		// exactly the window we need to compare against the local mods folder.
@@ -71,6 +103,7 @@ public final class ClientNetworking {
 
 				if (plan.isEmpty()) {
 					AutoModFetcher.LOGGER.info("Mods already match the server, joining normally");
+					diagnosis = null;
 					return respond(false);
 				}
 
@@ -80,6 +113,8 @@ public final class ClientNetworking {
 				if (!plan.hasActionableWork()
 						&& SkipDecisions.load().isAccepted(serverKey(), plan.unavailableSignature())) {
 					AutoModFetcher.LOGGER.info("Connecting anyway; the player accepted this before");
+					// Keep what is missing to hand back if the server drops them for it.
+					diagnosis = PendingDiagnosis.of(plan);
 					return respond(false);
 				}
 

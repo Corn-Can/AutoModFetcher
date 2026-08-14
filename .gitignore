@@ -42,3 +42,8 @@ replay_*.log
 # claude code — per-machine permissions, not project config
 
 .claude/settings.local.json
+
+# screenshots dropped in while debugging
+
+.claude/*.png
+.claude/*.jpg

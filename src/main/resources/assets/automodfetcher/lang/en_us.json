@@ -31,5 +31,10 @@
 	"automodfetcher.complete.menu": "Back to menu",
 	"automodfetcher.confirm.connect_anyway": "Connect anyway",
 	"automodfetcher.complete.restart_now": "Restart now",
-	"automodfetcher.complete.restart_failed": "Could not restart automatically — please close and reopen the game."
+	"automodfetcher.complete.restart_failed": "Could not restart automatically — please close and reopen the game.",
+	"automodfetcher.confirm.connect_anyway_warning": "If the server needs these, you may be disconnected right after joining.",
+	"automodfetcher.kicked.title": "Disconnected from the server",
+	"automodfetcher.kicked.server_said": "The server said: %s",
+	"automodfetcher.kicked.likely_cause": "This may be why:",
+	"automodfetcher.kicked.missing": "You are missing mods the server has:"
 }

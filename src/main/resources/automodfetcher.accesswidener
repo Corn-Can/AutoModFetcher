@@ -1,0 +1,16 @@
+accessWidener	v2	named
+
+# MinecraftClient.getCurrentServerEntry() is still null during the login phase, but the
+# login handler was handed the server it is talking to. Reading it from there is what lets
+# the confirm screen offer to reconnect, and gives a stable key for remembering the
+# player's decision about that server.
+accessible	field	net/minecraft/client/network/ClientLoginNetworkHandler	serverInfo	Lnet/minecraft/client/network/ServerInfo;
+
+# Fallback for connections that carry no server entry: the socket address still identifies
+# the server well enough to remember a decision against it.
+accessible	field	net/minecraft/client/network/ClientLoginNetworkHandler	connection	Lnet/minecraft/network/ClientConnection;
+
+# When a player is dropped moments after joining, our own screen replaces the disconnect
+# screen — so it has to carry the server's message across, or we would be hiding the only
+# thing the server actually said.
+accessible	field	net/minecraft/client/gui/screen/DisconnectedScreen	reason	Lnet/minecraft/text/Text;
