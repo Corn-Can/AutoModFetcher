@@ -165,11 +165,13 @@ public final class ManifestBuilder {
 			}
 
 			if (resolution.isRebuild()) {
-				// Clients get an equivalent build rather than the server's exact bytes, so the
-				// hash they verify against has to be the one belonging to the file they fetch.
+				// Clients get an equivalent build rather than the server's exact bytes, so
+				// every hash on the entry has to describe the file being fetched. Leaving the
+				// local SHA-1 in place produced an entry that half-described each file, which
+				// a modpack export then published as fact.
 				rebuilds++;
-				entries.add(new ModEntry(mod.fileName(), mod.sha1(), resolution.sha512(), resolution.size(),
-						resolution.url(), mod.side()));
+				entries.add(new ModEntry(mod.fileName(), resolution.sha1(), resolution.sha512(),
+						resolution.size(), resolution.url(), mod.side()));
 			} else {
 				entries.add(new ModEntry(mod.fileName(), mod.sha1(), mod.sha512(), mod.size(), resolution.url(),
 						mod.side()));

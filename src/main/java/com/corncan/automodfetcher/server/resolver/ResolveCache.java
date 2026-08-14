@@ -28,6 +28,7 @@ public class ResolveCache {
 		public long checkedAt;
 
 		/** Only set when the URL serves a different build than the server's own copy. */
+		public String sha1;
 		public String sha512;
 		public long size;
 
@@ -57,7 +58,7 @@ public class ResolveCache {
 		}
 
 		if (entry.isHit()) {
-			return new Resolution(entry.url, entry.source, entry.sha512, entry.size);
+			return new Resolution(entry.url, entry.source, entry.sha1, entry.sha512, entry.size);
 		}
 
 		return null;
@@ -74,6 +75,7 @@ public class ResolveCache {
 		Entry entry = new Entry();
 		entry.url = resolution.url();
 		entry.source = resolution.source();
+		entry.sha1 = resolution.sha1();
 		entry.sha512 = resolution.sha512();
 		entry.size = resolution.size();
 		entry.checkedAt = System.currentTimeMillis();

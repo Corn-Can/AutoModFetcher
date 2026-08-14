@@ -213,15 +213,17 @@ public final class ModrinthResolver {
 			return null;
 		}
 
-		JsonElement sha512 = chosen.getAsJsonObject("hashes").get("sha512");
+		JsonObject hashes = chosen.getAsJsonObject("hashes");
+		JsonElement sha1 = hashes.get("sha1");
+		JsonElement sha512 = hashes.get("sha512");
 		JsonElement size = chosen.get("size");
 
-		if (sha512 == null || size == null) {
+		if (sha1 == null || sha512 == null || size == null) {
 			return null;
 		}
 
 		return Resolution.rebuild(chosen.get("url").getAsString(), Resolution.SOURCE_MODRINTH_REBUILD,
-				sha512.getAsString(), size.getAsLong());
+				sha1.getAsString(), sha512.getAsString(), size.getAsLong());
 	}
 
 	/**
