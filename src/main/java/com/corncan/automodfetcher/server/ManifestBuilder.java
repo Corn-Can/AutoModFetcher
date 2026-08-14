@@ -45,7 +45,9 @@ public final class ManifestBuilder {
 			String manualUrl = manualUrlFor(config, mod.fileName());
 
 			if (manualUrl != null) {
-				resolved.put(mod.sha1(), new Resolution(manualUrl, Resolution.SOURCE_MANUAL));
+				// A manual URL must serve this server's exact file; the client verifies it
+				// against the hash computed here.
+				resolved.put(mod.sha1(), Resolution.exact(manualUrl, Resolution.SOURCE_MANUAL));
 				continue;
 			}
 
@@ -80,8 +82,24 @@ public final class ManifestBuilder {
 		AutoModFetcher.LOGGER.info("Resolving download URLs for {} mod file(s)...", needLookup.size());
 
 		List<String> sha1Hashes = needLookup.stream().map(ScannedMod::sha1).toList();
-		Map<String, Resolution> fromModrinth = ModrinthResolver.resolve(http, sha1Hashes);
-		resolved.putAll(fromModrinth);
+		resolved.putAll(ModrinthResolver.resolve(http, sha1Hashes));
+
+		// Second pass: a jar Modrinth does not know by hash is usually the CurseForge
+		// packaging of a release Modrinth does have. Look it up by mod id and version.
+		String gameVersion = AutoModFetcher.minecraftVersion();
+
+		for (ScannedMod mod : needLookup) {
+			if (resolved.containsKey(mod.sha1())) {
+				continue;
+			}
+
+			Resolution rebuild = ModrinthResolver.resolveByModVersion(http, mod.modId(), mod.modVersion(),
+					gameVersion);
+
+			if (rebuild != null) {
+				resolved.put(mod.sha1(), rebuild);
+			}
+		}
 
 		List<ScannedMod> stillMissing = needLookup.stream()
 				.filter(mod -> !resolved.containsKey(mod.sha1()))
@@ -120,6 +138,8 @@ public final class ManifestBuilder {
 		List<ModEntry> entries = new ArrayList<>();
 		List<String> unresolved = new ArrayList<>();
 
+		int rebuilds = 0;
+
 		for (ScannedMod mod : mods) {
 			Resolution resolution = resolved.get(mod.sha1());
 
@@ -128,12 +148,26 @@ public final class ManifestBuilder {
 				continue;
 			}
 
-			entries.add(new ModEntry(mod.fileName(), mod.sha1(), mod.sha512(), mod.size(), resolution.url(),
-					mod.side()));
+			if (resolution.isRebuild()) {
+				// Clients get an equivalent build rather than the server's exact bytes, so the
+				// hash they verify against has to be the one belonging to the file they fetch.
+				rebuilds++;
+				entries.add(new ModEntry(mod.fileName(), mod.sha1(), resolution.sha512(), resolution.size(),
+						resolution.url(), mod.side()));
+			} else {
+				entries.add(new ModEntry(mod.fileName(), mod.sha1(), mod.sha512(), mod.size(), resolution.url(),
+						mod.side()));
+			}
 		}
 
 		AutoModFetcher.LOGGER.info("Mod manifest ready: {} file(s) resolved, {} unresolved", entries.size(),
 				unresolved.size());
+
+		if (rebuilds > 0) {
+			AutoModFetcher.LOGGER.info(
+					"{} of those resolved to an equivalent build from another platform rather than "
+							+ "this server's exact file", rebuilds);
+		}
 
 		if (!unresolved.isEmpty()) {
 			AutoModFetcher.LOGGER.warn(

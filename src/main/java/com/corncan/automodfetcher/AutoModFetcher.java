@@ -25,6 +25,14 @@ public class AutoModFetcher implements ModInitializer {
 				.orElse("dev");
 	}
 
+	/** Read from the loader rather than a game constant so it stays mapping-independent. */
+	public static String minecraftVersion() {
+		return FabricLoader.getInstance()
+				.getModContainer("minecraft")
+				.map(container -> container.getMetadata().getVersion().getFriendlyString())
+				.orElse("unknown");
+	}
+
 	/**
 	 * Modrinth requires a descriptive user agent on every API call and will rate-limit
 	 * or reject anonymous-looking clients.

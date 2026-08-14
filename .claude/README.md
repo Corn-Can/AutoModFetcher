@@ -31,7 +31,13 @@ AutoModFetcher 是一個基於 Fabric (Yarn mappings, **MC 1.20.1**) 的「引�
 *   **客戶端啟動時就在背景把 `mods/` 雜湊建索引**（`local-index.json` 以 檔名+大小+mtime 快取）。這是必要的：連線當下沒有 1~2 秒可以現場算雜湊。
 
 ### 3. 平台解析層 (Resolvers)
-順序為：`manualUrls` → 本地快取 → Modrinth → CurseForge。
+順序為：`manualUrls` → 本地快取 → Modrinth（雜湊）→ Modrinth（modId+版本）→ CurseForge。
+*   **Modrinth 第二層（modId + 版本）** 是涵蓋率的關鍵。從 CurseForge 下載的 jar 與 Modrinth 上
+    同一版本的 jar 位元組不同（各自打包），所以 SHA-1 查詢會落空。這一層改用模組自己
+    `fabric.mod.json` 裡的 id 與 version 去比對，找出同一個版本的 Modrinth 建置。
+    版本比對用「完整 token」規則（左右邊界不得是英數或 `.`），避免 `1.0` 誤配 `11.0`。
+*   這種結果標記為 **rebuild**：`Resolution.sha512` 非 null，代表 manifest 要改用**解析來源的雜湊**
+    而不是伺服器本機檔案的雜湊，否則客戶端下載完必定驗證失敗。
 *   **Modrinth:** `POST /v2/version_files` 以 SHA-1 批次查詢，免 API key，需帶描述性 User-Agent。
 *   **CurseForge:** `POST /v1/fingerprints`，以 Murmur2 指紋查詢，需管理員自備 API key。
     若回傳 `downloadUrl` 為 `null`（作者關閉第三方下載），一律視為「無法解析」，**不會**自行拼 CDN 網址繞過。
@@ -54,7 +60,9 @@ AutoModFetcher 是一個基於 Fabric (Yarn mappings, **MC 1.20.1**) 的「引�
 
 1. **網域白名單** — 預設只信任 `cdn.modrinth.com` / `edge.forgecdn.net` / `mediafilez.forgecdn.net`。
 2. **強制 HTTPS**（`allowInsecureHttp` 預設 false）。
-3. **SHA-512 驗證**，且驗證的是**伺服器自己那份檔案**的雜湊，不是平台宣稱的雜湊——玩家拿到的會與伺服器實際在跑的位元組完全一致。同時強制檔案大小相符，並在超過宣告大小時中止串流。
+3. **SHA-512 驗證**。預設驗證的是**伺服器自己那份檔案**的雜湊，玩家拿到的與伺服器實際在跑的位元組完全一致。
+   唯一例外是上面說的 rebuild 情況（CF 打包 → Modrinth 等價建置），此時驗證改用 Modrinth 公布的雜湊。
+   兩種情況都強制檔案大小相符，並在超過宣告大小時中止串流。
 4. **檔名消毒** — 拒絕含 `/`、`\`、`..`、`:` 或非 `.jar` 的檔名，避免伺服器用檔名跳出 mods 資料夾。
 
 另外，**刪除只針對本模組自己安裝過的檔案**（記錄在 `installed.json`）。玩家自行安裝的 Sodium、Iris 等永遠不會被碰。

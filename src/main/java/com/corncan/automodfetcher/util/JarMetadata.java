@@ -12,8 +12,8 @@ import com.corncan.automodfetcher.network.ModSide;
 import com.google.gson.JsonObject;
 
 /** Reads the bits of a mod jar's own {@code fabric.mod.json} that we care about. */
-public record JarMetadata(String modId, ModSide side) {
-	private static final JarMetadata UNKNOWN = new JarMetadata(null, ModSide.BOTH);
+public record JarMetadata(String modId, String version, ModSide side) {
+	private static final JarMetadata UNKNOWN = new JarMetadata(null, null, ModSide.BOTH);
 
 	/**
 	 * Never throws: a jar we cannot parse is treated as a universal mod, which is the
@@ -35,14 +35,19 @@ public record JarMetadata(String modId, ModSide side) {
 					return UNKNOWN;
 				}
 
-				String modId = json.has("id") ? json.get("id").getAsString() : null;
-				String environment = json.has("environment") ? json.get("environment").getAsString() : null;
-
-				return new JarMetadata(modId, ModSide.fromEnvironment(environment));
+				return new JarMetadata(
+						string(json, "id"),
+						string(json, "version"),
+						ModSide.fromEnvironment(string(json, "environment"))
+				);
 			}
 		} catch (Exception e) {
 			AutoModFetcher.LOGGER.warn("Could not read mod metadata from {}", jar.getFileName(), e);
 			return UNKNOWN;
 		}
+	}
+
+	private static String string(JsonObject json, String key) {
+		return json.has(key) && json.get(key).isJsonPrimitive() ? json.get(key).getAsString() : null;
 	}
 }

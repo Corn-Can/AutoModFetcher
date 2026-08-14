@@ -18,7 +18,7 @@ public final class ServerModScanner {
 	}
 
 	public record ScannedMod(Path path, String fileName, String sha1, String sha512, long size, ModSide side,
-			String modId) {
+			String modId, String modVersion) {
 	}
 
 	/** Hashes every jar in the server's mods folder and reads each one's declared environment. */
@@ -59,7 +59,7 @@ public final class ServerModScanner {
 				try {
 					Hashing.FileHashes hashes = Hashing.hash(jar);
 					results.add(new ScannedMod(jar, fileName, hashes.sha1(), hashes.sha512(), hashes.size(),
-							metadata.side(), metadata.modId()));
+							metadata.side(), metadata.modId(), metadata.version()));
 				} catch (IOException e) {
 					AutoModFetcher.LOGGER.warn("Could not hash {}, it will not be synced", fileName, e);
 				}

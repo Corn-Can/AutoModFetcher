@@ -116,7 +116,7 @@ public final class CurseForgeResolver {
 				continue;
 			}
 
-			results.put(sha1, new Resolution(downloadUrl.getAsString(), Resolution.SOURCE_CURSEFORGE));
+			results.put(sha1, Resolution.exact(downloadUrl.getAsString(), Resolution.SOURCE_CURSEFORGE));
 		}
 	}
 

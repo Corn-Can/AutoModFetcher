@@ -39,8 +39,13 @@
 |---|---|
 | 網域白名單 | 預設只信任 `cdn.modrinth.com`、`edge.forgecdn.net`、`mediafilez.forgecdn.net` |
 | 強制 HTTPS | 明文連線會被拒絕 |
-| 雜湊驗證 | 下載完必須與伺服器那份**位元組完全一致**，否則丟棄 |
+| 雜湊驗證 | 下載完的檔案必須與清單宣告的 SHA-512 完全相符，否則丟棄 |
 | 檔名檢查 | 拒絕任何試圖跳出 `mods/` 的檔名 |
+
+關於雜湊驗證，有一個細節值得知道：多數情況下你拿到的檔案與伺服器實際在跑的**位元組完全相同**。
+但如果伺服器管理員的某個模組是從 CurseForge 下載的，而該模組同時也在 Modrinth 上架，
+你會拿到 **Modrinth 上同一個版本的建置**——同一個模組、同一個版本號，只是打包來源不同。
+這種情況下驗證比對的是 Modrinth 公布的雜湊。無論哪種情況，下載都必須通過驗證才會被安裝。
 
 要新增信任來源，編輯 `config/automodfetcher/client.json`：
 
@@ -74,12 +79,18 @@
 伺服器啟動時掃描自己的 `mods/`，替每個檔案找出下載網址，順序是：
 
 ```
-manualUrls 設定  →  本地快取  →  Modrinth  →  CurseForge
+manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth（模組 ID + 版本）  →  CurseForge
 ```
 
-- **Modrinth** 免 API key，用 SHA-1 查詢，涵蓋大多數模組
-- **CurseForge** 需要你自備 API key，用 Murmur2 指紋查詢
+- **Modrinth（雜湊）** 免 API key，用 SHA-1 精確查詢，涵蓋大多數模組
+- **Modrinth（模組 ID + 版本）** 免 API key。**你從 CurseForge 下載的模組會落在這一層**：
+  兩個平台各自打包同一個版本，位元組不同，所以雜湊查不到。這一層改用模組 ID 加版本號比對，
+  找到同一個版本的 Modrinth 建置。玩家因此拿到功能等價、但非伺服器那份位元組的檔案，log 會標示出來。
+- **CurseForge** 需要你自備 API key，用 Murmur2 指紋查詢。只有「僅在 CF 上架」的模組才會走到這裡。
 - 都查不到的檔案會在 log 列出，並在玩家端顯示為「請自行安裝」
+
+實務上這表示：**大多數情況你不需要 CurseForge API key**，就算模組是從 CF 下載的也一樣，
+只要它同時有上架 Modrinth。
 
 查詢結果快取在 `resolve-cache.json`，所以模組沒變動就不會重複打 API。
 
@@ -151,4 +162,7 @@ manualUrls 設定  →  本地快取  →  Modrinth  →  CurseForge
 
 ## 授權
 
-CC0-1.0
+All Rights Reserved — 詳見 [`LICENSE`](LICENSE)。
+
+可以自由使用、也可以收錄進整合包或伺服器整合包（需註明名稱並附上官方下載頁連結）。
+不可單獨轉載、二次發布或散布修改版。
