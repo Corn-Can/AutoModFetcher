@@ -8,7 +8,7 @@
 		"CornCan"
 	],
 	"contact": {},
-	"license": "CC0-1.0",
+	"license": "ARR",
 	"icon": "assets/automodfetcher/icon.png",
 	"environment": "*",
 	"entrypoints": {
