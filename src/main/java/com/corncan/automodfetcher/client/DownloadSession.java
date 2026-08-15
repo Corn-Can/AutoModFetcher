@@ -19,12 +19,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.PendingOps;
@@ -59,7 +59,16 @@ public class DownloadSession {
 	private final Map<String, String> failureReasons = new LinkedHashMap<>();
 	private final Map<String, String> completed = new LinkedHashMap<>();
 
-	private final AtomicLong downloadedBytes = new AtomicLong();
+	/**
+	 * Bytes secured per file, rather than one running total.
+	 *
+	 * <p>A total that only ever counts upwards breaks the moment an attempt fails or resumes:
+	 * the retry counts the same bytes again and the bar runs past the end. Recording each
+	 * file's position lets an attempt simply overwrite its own figure.
+	 */
+	private final Map<String, Long> progress = new ConcurrentHashMap<>();
+
+	private final RateMeter rate = new RateMeter();
 	private final AtomicInteger remaining = new AtomicInteger();
 
 	private final AtomicBoolean finishing = new AtomicBoolean();
@@ -139,10 +148,15 @@ public class DownloadSession {
 				install(entry);
 				return;
 			} catch (BlockedHostException e) {
+				deleteQuietly(partFileFor(entry));
 				fail(entry, e);
 				return;
 			} catch (Exception e) {
 				if (attempt == attempts) {
+					// Only now is the partial file worthless: up to here it was the head start
+					// for the next attempt.
+					deleteQuietly(partFileFor(entry));
+					progress.remove(entry.fileName());
 					fail(entry, e);
 					return;
 				}
@@ -159,33 +173,29 @@ public class DownloadSession {
 	}
 
 	private void install(ModEntry entry) throws Exception {
-		Path temp = ModPaths.downloadTempDir().resolve(entry.fileName() + ".part");
-		long before = downloadedBytes.get();
+		Path temp = partFileFor(entry);
+		String sha512 = fetch(entry, temp);
 
-		try {
-			String sha512 = fetch(entry, temp);
-
-			if (!sha512.equalsIgnoreCase(entry.sha512())) {
-				// Retried like any other fault: a truncated transfer looks the same as a
-				// tampered one from here, and the second attempt is verified just as strictly.
-				throw new IOException("Checksum mismatch");
-			}
-
-			Files.move(temp, ModPaths.modsDir().resolve(entry.fileName()), StandardCopyOption.REPLACE_EXISTING);
-
-			synchronized (completed) {
-				completed.put(entry.fileName(), sha512.toLowerCase(Locale.ROOT));
-			}
-
-			setStatus(entry, Status.DONE, null);
-			AutoModFetcher.LOGGER.info("Installed {}", entry.fileName());
-		} catch (Exception e) {
-			// Roll the progress bar back to where this attempt started, or a retry would
-			// count the same bytes twice and drive the bar past the end.
-			downloadedBytes.set(before);
+		if (!sha512.equalsIgnoreCase(entry.sha512())) {
+			// A mismatch means the bytes on disk are wrong, so resuming from them would only
+			// preserve the mistake. Start the next attempt clean.
 			deleteQuietly(temp);
-			throw e;
+			throw new IOException("Checksum mismatch");
 		}
+
+		Files.move(temp, ModPaths.modsDir().resolve(entry.fileName()), StandardCopyOption.REPLACE_EXISTING);
+
+		synchronized (completed) {
+			completed.put(entry.fileName(), sha512.toLowerCase(Locale.ROOT));
+		}
+
+		progress.put(entry.fileName(), entry.size());
+		setStatus(entry, Status.DONE, null);
+		AutoModFetcher.LOGGER.info("Installed {}", entry.fileName());
+	}
+
+	private Path partFileFor(ModEntry entry) {
+		return ModPaths.downloadTempDir().resolve(entry.fileName() + ".part");
 	}
 
 	private void fail(ModEntry entry, Exception cause) {
@@ -216,18 +226,26 @@ public class DownloadSession {
 	private String fetch(ModEntry entry, Path temp) throws Exception {
 		String url = entry.url();
 
+		// Whatever a previous attempt managed to save. Asking for the rest turns a failure at
+		// 90% into a short top-up instead of starting the whole file again.
+		long alreadyHave = partialSize(temp, entry.size());
+
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
 			if (!config.isAllowed(url)) {
 				throw new BlockedHostException("Blocked host: " + ClientConfig.hostOf(url));
 			}
 
-			HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+			HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
 					.header("User-Agent", AutoModFetcher.userAgent())
 					.timeout(Duration.ofMinutes(5))
-					.GET()
-					.build();
+					.GET();
 
-			HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+			if (alreadyHave > 0) {
+				builder.header("Range", "bytes=" + alreadyHave + "-");
+			}
+
+			HttpResponse<InputStream> response = http.send(builder.build(),
+					HttpResponse.BodyHandlers.ofInputStream());
 			int code = response.statusCode();
 
 			if (code >= 300 && code < 400) {
@@ -242,25 +260,69 @@ public class DownloadSession {
 				continue;
 			}
 
-			if (code != 200) {
-				response.body().close();
-				throw new IOException("HTTP " + code);
+			if (code == 206) {
+				AutoModFetcher.LOGGER.info("Resuming {} from byte {}", entry.fileName(), alreadyHave);
+				return streamToFile(entry, response.body(), temp, alreadyHave);
 			}
 
-			return streamToFile(entry, response.body(), temp);
+			if (code == 200) {
+				// The host ignored the range and is sending the whole thing, so the head start
+				// is worthless and keeping it would corrupt the file.
+				return streamToFile(entry, response.body(), temp, 0);
+			}
+
+			response.body().close();
+			throw new IOException("HTTP " + code);
 		}
 
 		throw new IOException("Too many redirects");
 	}
 
-	private String streamToFile(ModEntry entry, InputStream body, Path temp) throws Exception {
+	private long partialSize(Path temp, long expected) {
+		try {
+			if (!Files.isRegularFile(temp)) {
+				return 0;
+			}
+
+			long size = Files.size(temp);
+
+			// A part at or beyond full size is not a head start, it is a leftover to discard.
+			return size > 0 && size < expected ? size : 0;
+		} catch (IOException e) {
+			return 0;
+		}
+	}
+
+	/**
+	 * @param resumeFrom bytes already on disk to keep and append to; 0 to start the file over
+	 */
+	private String streamToFile(ModEntry entry, InputStream body, Path temp, long resumeFrom) throws Exception {
 		MessageDigest digest = MessageDigest.getInstance("SHA-512");
 		byte[] buffer = new byte[BUFFER_SIZE];
-		long written = 0;
+		long written = resumeFrom;
+
+		// The hash covers the whole file, so what is already on disk has to go through the
+		// digest before the new bytes do.
+		if (resumeFrom > 0) {
+			try (InputStream existing = Files.newInputStream(temp)) {
+				long fed = 0;
+				int read;
+
+				while (fed < resumeFrom && (read = existing.read(buffer, 0,
+						(int) Math.min(buffer.length, resumeFrom - fed))) != -1) {
+					digest.update(buffer, 0, read);
+					fed += read;
+				}
+			}
+		}
+
+		StandardOpenOption mode = resumeFrom > 0
+				? StandardOpenOption.APPEND
+				: StandardOpenOption.TRUNCATE_EXISTING;
 
 		try (InputStream in = body;
 				OutputStream out = Files.newOutputStream(temp, StandardOpenOption.CREATE,
-						StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+						mode, StandardOpenOption.WRITE)) {
 			int read;
 
 			while ((read = in.read(buffer)) != -1) {
@@ -272,7 +334,7 @@ public class DownloadSession {
 				digest.update(buffer, 0, read);
 
 				written += read;
-				downloadedBytes.addAndGet(read);
+				progress.put(entry.fileName(), written);
 
 				// The manifest states an exact size, so anything longer is already wrong.
 				if (written > entry.size()) {
@@ -383,7 +445,29 @@ public class DownloadSession {
 	}
 
 	public long downloadedBytes() {
-		return downloadedBytes.get();
+		long total = 0;
+
+		for (long value : progress.values()) {
+			total += value;
+		}
+
+		return total;
+	}
+
+	/** Bytes per second, smoothed; zero until there is enough to say. */
+	public long bytesPerSecond() {
+		return rate.sample(downloadedBytes());
+	}
+
+	/** Seconds left at the current rate, or -1 when that cannot be estimated yet. */
+	public long secondsRemaining() {
+		long perSecond = bytesPerSecond();
+
+		if (perSecond <= 0) {
+			return -1;
+		}
+
+		return Math.max(0, (totalBytes() - downloadedBytes()) / perSecond);
 	}
 
 	public long totalBytes() {

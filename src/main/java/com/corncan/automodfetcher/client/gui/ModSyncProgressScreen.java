@@ -27,7 +27,7 @@ public class ModSyncProgressScreen extends Screen {
 
 	@Override
 	protected void init() {
-		int listTop = 74;
+		int listTop = 86;
 		int listBottom = this.height - 46;
 		int listWidth = Math.min(360, this.width - 60);
 		int listX = (this.width - listWidth) / 2;
@@ -70,8 +70,31 @@ public class ModSyncProgressScreen extends Screen {
 						Sizes.format(done), Sizes.format(session.totalBytes())),
 				this.width / 2, barY + 16, 0xFFA0A0A0);
 
+		// A bar alone cannot tell someone whether to wait or walk away.
+		long perSecond = session.bytesPerSecond();
+
+		if (perSecond > 0) {
+			context.drawCenteredTextWithShadow(this.textRenderer,
+					Text.translatable("automodfetcher.progress.rate",
+							Sizes.format(perSecond), formatRemaining(session.secondsRemaining())),
+					this.width / 2, barY + 28, 0xFFA0A0A0);
+		}
+
 		list.setLines(buildLines());
 		list.render(context, this.textRenderer, mouseX, mouseY);
+	}
+
+	/** Rounded generously: a countdown that claims precision it does not have reads as broken. */
+	private String formatRemaining(long seconds) {
+		if (seconds < 0) {
+			return "--";
+		}
+
+		if (seconds < 60) {
+			return Math.max(1, seconds) + "s";
+		}
+
+		return (seconds / 60) + "m " + (seconds % 60) + "s";
 	}
 
 	private List<LineList.Line> buildLines() {

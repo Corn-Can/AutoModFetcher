@@ -42,5 +42,6 @@
 	"automodfetcher.confirm.remember": "Don't ask again for this server",
 	"automodfetcher.complete.retry": "Try again",
 	"automodfetcher.complete.incomplete": "Some mods are still missing — try again, or go back and pick another server.",
-	"automodfetcher.command.reloading": "Rebuilding the mod list..."
+	"automodfetcher.command.reloading": "Rebuilding the mod list...",
+	"automodfetcher.progress.rate": "%s/s — about %s left"
 }

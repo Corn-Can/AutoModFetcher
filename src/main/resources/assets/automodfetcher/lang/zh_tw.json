@@ -42,5 +42,6 @@
 	"automodfetcher.confirm.remember": "不要再為此伺服器詢問",
 	"automodfetcher.complete.retry": "重試",
 	"automodfetcher.complete.incomplete": "還有模組沒裝好——可以重試，或回主選單換一台伺服器。",
-	"automodfetcher.command.reloading": "正在重建模組清單……"
+	"automodfetcher.command.reloading": "正在重建模組清單……",
+	"automodfetcher.progress.rate": "%s/s — 約剩 %s"
 }
