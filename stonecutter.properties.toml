@@ -1,0 +1,19 @@
+# Every version- and loader-specific number lives here, so adding a target means adding a
+# table rather than editing build scripts.
+
+mod.id = "automodfetcher"
+mod.name = "AutoModFetcher"
+mod.group = "com.corncan.automodfetcher"
+mod.version = "0.1.0"
+
+deps.fabric_loader = "0.16.14"
+loomx.loom_version = "1.14-SNAPSHOT"
+
+["1.20.1"]
+mod.mc_releases = ["1.20.1"]
+
+[fabric."1.20.1"]
+# Pinned, not a range. The login query phase this mod hooks was removed in 1.20.2, so a
+# build that advertised 1.20.x would install, load, and silently do nothing.
+mod.mc_compat = "1.20.1"
+deps.fabric_api = "0.92.11+1.20.1"

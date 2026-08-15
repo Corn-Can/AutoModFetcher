@@ -80,7 +80,11 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings, **MC 1.20.1**) 
 ## 📂 專案目錄結構
 
 ```
-build.gradle                        Loom 設定；toolchain JDK 21 + release 17，client/server 分開 run 目錄
+settings.gradle.kts                 Stonecutter 節點宣告，一個 (MC 版本, loader) 組合一個節點
+stonecutter.gradle.kts              目前啟用哪個節點；把 loader 名稱注入 `//? if fabric {` 常數
+stonecutter.properties.toml         所有版本/loader 相關的數字（mod 版本、loader 版本、相容範圍）
+build.fabric.gradle.kts             Fabric 節點的建置腳本；toolchain JDK 21 + release 17
+versions/<節點>/                    Stonecutter 產生，不進版控
 gradle/gradle-daemon-jvm.properties Gradle daemon 鎖 JDK 21（本機 PATH 上是 Java 26，會編不動 build script）
 src/main/
   java/com/corncan/automodfetcher/
@@ -146,10 +150,15 @@ src/main/
 ## 🧪 開發與測試
 
 ```bash
-./gradlew build        # 產出 build/libs/automodfetcher-0.1.0.jar
-./gradlew runServer    # run/server/
-./gradlew runClient    # run/client/
+./gradlew build                             # 建置目前啟用的節點
+./gradlew buildAndCollect                   # 同上，並把 jar 收到 build/libs/<mod 版本>/
+./gradlew :1.20.1-fabric:runServer          # run/server/
+./gradlew :1.20.1-fabric:runClient          # run/client/
+./gradlew "Set active project to 1.20.1-fabric"   # 切換啟用節點
 ```
+
+節點名稱是 `<MC 版本>-<loader>`。run 目錄刻意指回專案根目錄的 `run/`，
+所以切換節點時世界、ops、伺服器設定都還在，不必每次重新架一次。
 
 client 與 server 的 run 目錄刻意分開，否則兩邊共用同一個 `mods/` 就永遠沒有差異可測。
 把要測的模組丟進 `run/server/mods/`，然後用 dev client 連 `localhost`
