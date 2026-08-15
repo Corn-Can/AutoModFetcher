@@ -41,5 +41,6 @@
 	"automodfetcher.confirm.shared_install": "These will load in all your other worlds too — give this server its own game directory.",
 	"automodfetcher.confirm.remember": "Don't ask again for this server",
 	"automodfetcher.complete.retry": "Try again",
-	"automodfetcher.complete.incomplete": "Some mods are still missing — try again, or go back and pick another server."
+	"automodfetcher.complete.incomplete": "Some mods are still missing — try again, or go back and pick another server.",
+	"automodfetcher.command.reloading": "Rebuilding the mod list..."
 }

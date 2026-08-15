@@ -40,24 +40,34 @@ public final class ServerNetworking {
 			return;
 		}
 
-		Thread builder = new Thread(() -> {
-			try {
-				ServerSyncConfig config = ServerSyncConfig.load();
-
-				if (!config.syncEnabled) {
-					AutoModFetcher.LOGGER.info("Mod sync is disabled in {}", ServerSyncConfig.FILE_NAME);
-					return;
-				}
-
-				manifest = ManifestBuilder.build(config);
-			} catch (Exception e) {
-				AutoModFetcher.LOGGER.error("Could not build the mod manifest; clients will not be synced", e);
-			}
-		}, "AutoModFetcher-manifest-builder");
-
 		// Built off-thread so platform lookups never hold up server startup.
+		Thread builder = new Thread(ServerNetworking::rebuild, "AutoModFetcher-manifest-builder");
 		builder.setDaemon(true);
 		builder.start();
+	}
+
+	/**
+	 * Re-reads the config and rebuilds the manifest. Blocking, so callers pick their thread.
+	 *
+	 * @return the new manifest, or null when sync is off or the build failed
+	 */
+	public static ModManifest rebuild() {
+		try {
+			ServerSyncConfig config = ServerSyncConfig.load();
+
+			if (!config.syncEnabled) {
+				AutoModFetcher.LOGGER.info("Mod sync is disabled in {}", ServerSyncConfig.FILE_NAME);
+				manifest = null;
+				return null;
+			}
+
+			manifest = ManifestBuilder.build(config);
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.error("Could not build the mod manifest; clients will not be synced", e);
+			manifest = null;
+		}
+
+		return manifest;
 	}
 
 	private static void onQueryStart(ServerLoginNetworkHandler handler, MinecraftServer server, PacketSender sender,

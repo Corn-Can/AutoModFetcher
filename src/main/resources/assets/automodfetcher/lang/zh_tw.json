@@ -41,5 +41,6 @@
 	"automodfetcher.confirm.shared_install": "這些模組也會出現在你其他的世界中——建議為這台伺服器設定獨立的遊戲目錄。",
 	"automodfetcher.confirm.remember": "不要再為此伺服器詢問",
 	"automodfetcher.complete.retry": "重試",
-	"automodfetcher.complete.incomplete": "還有模組沒裝好——可以重試，或回主選單換一台伺服器。"
+	"automodfetcher.complete.incomplete": "還有模組沒裝好——可以重試，或回主選單換一台伺服器。",
+	"automodfetcher.command.reloading": "正在重建模組清單……"
 }

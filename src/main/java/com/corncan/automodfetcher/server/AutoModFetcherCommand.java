@@ -6,8 +6,10 @@ import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.server.export.CurseForgePackExporter;
 import com.corncan.automodfetcher.server.export.MrpackExporter;
+import com.corncan.automodfetcher.util.ModPaths;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
@@ -21,12 +23,64 @@ public final class AutoModFetcherCommand {
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
 				dispatcher.register(CommandManager.literal("automodfetcher")
 						.requires(source -> source.hasPermissionLevel(2))
+						.then(CommandManager.literal("reload")
+								.executes(context -> reload(context.getSource())))
 						.then(CommandManager.literal("export")
 								.executes(context -> exportAll(context.getSource()))
 								.then(CommandManager.literal("modrinth")
 										.executes(context -> exportMrpack(context.getSource())))
 								.then(CommandManager.literal("curseforge")
 										.executes(context -> exportCursePack(context.getSource()))))));
+	}
+
+	/**
+	 * Rebuilds the manifest from the config and the mods folder as they are right now.
+	 *
+	 * <p>Runs off the server thread: resolving can mean waiting on two platforms, and nobody
+	 * should have to watch the world freeze for it.
+	 */
+	private static int reload(ServerCommandSource source) {
+		MinecraftServer server = source.getServer();
+
+		source.sendFeedback(() -> Text.translatable("automodfetcher.command.reloading"), true);
+
+		Thread worker = new Thread(() -> {
+			try {
+				ModManifest rebuilt = ServerNetworking.rebuild();
+				List<String> notRunning = LoadedModCheck.notRunning(
+						ServerModScanner.scan(ModPaths.modsDir(), ServerSyncConfig.load()));
+
+				server.execute(() -> report(source, rebuilt, notRunning));
+			} catch (Throwable e) {
+				// Without this the thread dies quietly and whoever ran the command is left
+				// watching "rebuilding..." forever, with the reason only in the log.
+				AutoModFetcher.LOGGER.error("Reload failed", e);
+				server.execute(() -> source.sendError(
+						Text.literal("Reload failed: " + e + " — see the server log.")));
+			}
+		}, "AutoModFetcher-reload");
+
+		worker.setDaemon(true);
+		worker.start();
+
+		return 1;
+	}
+
+	private static void report(ServerCommandSource source, ModManifest rebuilt, List<String> notRunning) {
+		if (rebuilt == null) {
+			source.sendError(Text.literal("Reload finished with no mod list — sync may be disabled, "
+					+ "or the rebuild failed. Check the log."));
+			return;
+		}
+
+		source.sendFeedback(() -> Text.literal("Mod list rebuilt: " + rebuilt.entries().size()
+				+ " resolved, " + rebuilt.unresolved().size() + " unresolved"), true);
+
+		// The part an operator will not guess: mods cannot be hot-loaded, so a jar added just
+		// now is in the list players receive and is still not running here.
+		warnAbout(source, notRunning,
+				" are in mods/ but this server is not running them — mods only load at startup. "
+						+ "Players will be told to install them anyway. Restart to catch up: ");
 	}
 
 	/**
