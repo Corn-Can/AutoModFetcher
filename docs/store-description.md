@@ -8,140 +8,96 @@
 
 ## English
 
-### AutoModFetcher
+# 上架用說明文案 (優化版)
 
-**Join a modded server without hunting down its mods first.**
-
-You connect. The server tells your game which mods it runs. Anything you are
-missing is downloaded, checked, and installed. You restart once and play.
-
-No hunting through mod pages. No guessing which version. No being told
-"Disconnected" with nothing to go on.
+發布前小提醒：記得在平台頁面的依賴設定區把 **Fabric API** 設為 Required Dependency 哦！
 
 ---
 
-#### For players
+## English
 
-The first time a server needs something you do not have, you get a screen
-listing every file: its name, its size, and the site it will come from. Nothing
-is installed until you say so.
+# 🔄 AutoModFetcher
 
-- **Nothing arrives silently.** Downloads only come from hosts on your allow
-  list — Modrinth and CurseForge by default — over HTTPS, and every file is
-  verified against a checksum before it is installed. A file that does not
-  match is discarded.
-- **Your own mods are safe.** Cleanup only ever touches files this mod
-  installed. Sodium, Iris, your shaders, your resource pack loader — untouched,
-  whatever the server says.
-- **Ask once, or not at all.** Tick a box and a server you trust stops asking
-  every time it updates. The checks still run; only the question goes away.
-- **When something cannot be installed**, you get the mod's official page as a
-  link, not just a file name to search for.
+**Join modded servers instantly. No hunting for files, no guessing versions, no "Disconnected" screens.**
 
-#### For server owners
-
-Put the mod on your server, start it once, and your mod list is published to
-players automatically. Change your mods, restart, and everyone gets the update
-on their next join.
-
-- **Download links are found for you.** Mods are matched against Modrinth by
-  hash, then by name and version — so a jar you downloaded from CurseForge
-  still resolves. A CurseForge API key is optional and only needed for mods
-  that exist nowhere else.
-- **Nothing is rehosted.** The manifest carries links, never files. Your server
-  does not redistribute anyone's mod.
-- **Export a modpack** with `/automodfetcher export` — both Modrinth
-  (`.mrpack`) and CurseForge formats, in one command. New players import one
-  file and have Fabric, every mod, and this mod, all at once.
-- **`/automodfetcher reload`** rebuilds the list without restarting, and tells
-  you which jars are in your folder but not actually running.
-
-#### Works with the vanilla launcher
-
-The official Minecraft launcher supports no modpack format at all. For players
-using it, this mod is the only route to a synced server — install Fabric, drop
-in two jars, and everything after that is automatic.
+You connect. The server tells your game which mods it runs. AutoModFetcher downloads the missing pieces, verifies them, and prepares your game. Just restart once and play.
 
 ---
 
-#### Requirements
+### 🎮 For Players: Secure & Effortless
 
-- Minecraft **1.20.1**, Fabric
-- **Fabric API**
-- Installed on **both** the server and the client
-- Dedicated servers only (LAN worlds are not affected)
+The first time a server requests mods you don't have, a clean UI will display every required file—showing its name, size, and source website. **Nothing is installed until you click agree.**
 
-#### What it cannot do
+*   🛡️ **Secure by Default:** Downloads only come from trusted, whitelisted sources (Modrinth & CurseForge) via HTTPS. Every file is strictly verified against a SHA hash. Mismatched files are immediately discarded.
+*   🗂️ **Your Own Mods Are Safe:** The cleanup system only manages files installed by AutoModFetcher. Your client-side mods (Sodium, Iris, shaders, resource packs) remain completely untouched.
+*   ⚙️ **Smart Prompts:** Check the "Trust this server" box, and it will handle future updates quietly. The security checks still run, but the prompts get out of your way.
+*   🔗 **Direct Fallbacks:** If a mod cannot be downloaded automatically, you get a clickable link to its official page—not just a vague file name to search for.
 
-Being straight about the edges:
+### 🛠️ For Server Owners: True Plug-and-Play
 
-- **A restart is required** after mods are installed. Fabric scans the mods
-  folder at launch; nothing can change that from inside a running game.
-- **Some mods cannot be distributed at all.** When an author disables
-  third-party downloads, no tool may serve their file. You get a link to their
-  page instead. Server owners: this is worth knowing when choosing mods.
-- **Removals happen on the next launch**, because a loaded jar cannot be
-  deleted while the game is running.
+Drop the mod into your server and start it. Your mod list is automatically generated and published to connecting players. Update a mod? Just restart the server, and all players will sync on their next join.
 
-#### Licence
+*   🔍 **Smart Resolution:** Mods are matched against Modrinth by hash, then by name and version. Even if you downloaded a `.jar` from CurseForge, AutoModFetcher will resolve it. (A CurseForge API key is optional, needed only for exclusive mods).
+*   ⚖️ **100% Legal & Respectful:** Nothing is rehosted. The manifest only sends secure URLs to the clients. Your server never illegally redistributes files.
+*   📦 **One-Command Modpacks:** Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and CurseForge zip formats. Give this one file to completely new players, and they'll have everything they need.
+*   🔄 **Hot-Reloading:** Use `/automodfetcher reload` to rebuild the manifest without restarting the server. It will even warn you about inactive `.jar` files in your folder.
 
-All Rights Reserved. Free to use, including on commercial servers, and free to
-include in modpacks and server packs with credit and a link back.
-Redistributing it on its own is not permitted.
+### 💡 Works with the Vanilla Launcher
+The official Minecraft launcher doesn't support modpacks. AutoModFetcher is the perfect bridge—players just install Fabric, drop in two jars (Fabric API + AutoModFetcher), and the server handles the rest.
+
+---
+
+### 📋 Requirements & Important Notes
+
+*   **Requirements:** Minecraft **1.20.1** | Fabric Loader | **Fabric API**
+*   **Installation:** Must be installed on **both** the Server and the Client (Dedicated servers only; LAN worlds are not supported).
+*   **Restart is Mandatory:** Due to how Java class loading works, Fabric only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code.
+*   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that. Players will receive a direct link to download it manually.
+*   **File Deletion:** Removed mods are deleted on the *next* launch, as Java locks running `.jar` files.
+
+**Licence:** All Rights Reserved. Free to use (including on commercial servers) and free to include in modpacks/server packs with credit. Standalone redistribution is not permitted.
 
 ---
 
 ## 繁體中文
 
-### AutoModFetcher（自動模組同步器）
+# 🔄 AutoModFetcher（自動模組同步器）
 
-**進模組伺服器之前，不必再自己一個一個找模組。**
+**進模組伺服器之前，別再自己辛苦找模組了。**
 
-你連線，伺服器告訴你的遊戲它跑了哪些模組，缺的自動下載、驗證、安裝。重啟一次就能玩。
-
-不用翻模組頁面，不用猜版本，也不會只看到一句沒有任何線索的「連線中斷」。
+連線、同步、重啟。伺服器會自動告訴客戶端需要哪些模組，缺失的檔案將會被自動下載、驗證並安裝。告別「連線中斷」的錯誤訊息，也告別大海撈針的除錯過程。
 
 ---
 
-#### 給玩家
+### 🎮 給玩家：安全、透明、無痛連線
 
-第一次遇到伺服器需要你沒有的模組時，畫面會列出每個檔案的**名稱、大小、以及來源網站**。你不同意，什麼都不會安裝。
+當伺服器需要你沒有的模組時，畫面會清楚列出每個檔案的**名稱、大小與來源網站**。在點擊同意之前，**不會有任何東西被安裝**。
 
-- **沒有東西會悄悄裝進來。** 只從白名單上的來源下載（預設是 Modrinth 和 CurseForge）、強制 HTTPS，而且每個檔案都要通過雜湊驗證才會安裝。對不上的直接丟棄。
-- **你自己裝的模組不會被動。** 清理只針對這個模組安裝過的檔案。Sodium、Iris、光影、資源包載入器——不管伺服器怎麼說都不會碰。
-- **可以只問一次，或完全不問。** 勾選之後，你信任的伺服器更新時就不再詢問。檢查照常執行，消失的只是那個問題。
-- **真的裝不了的時候**，會給你該模組的官方頁面連結，而不是丟一個檔名叫你自己去搜。
+*   🛡️ **絕對安全：** 所有檔案僅從白名單來源（預設為 Modrinth 與 CurseForge）透過 HTTPS 下載。每個檔案在安裝前都會經過嚴格的雜湊（Hash）驗證，對不上的檔案會直接丟棄。
+*   🗂️ **你的模組，你做主：** 系統只會管理本模組下載的檔案。你自己安裝的客戶端模組（Sodium, Iris, 光影, 資源包）絕對不會被動到。
+*   ⚙️ **信任名單：** 勾選「信任此伺服器」後，未來的更新將在背景自動處理（安全驗證依然會執行），不再頻繁打斷你的遊戲體驗。
+*   🔗 **精準引導：** 如果遇到作者禁止第三方下載的模組，我們會直接提供官方頁面連結，而不是丟一個檔名叫你自己去搜。
 
-#### 給伺服器管理員
+### 🛠️ 給服主：全自動同步，真正的隨插即用
 
-把模組放進伺服器、啟動一次，你的模組清單就會自動發布給玩家。之後換模組、重啟，所有人下次連線時自動同步。
+把模組放進伺服器並啟動，模組清單就會自動發布給所有玩家。未來更新模組？只要換好檔案並重啟伺服器，所有人下次連線時就會自動同步更新。
 
-- **下載連結會自動找出來。** 先用雜湊比對 Modrinth，再用模組 ID 加版本號比對——所以**你從 CurseForge 下載的 jar 一樣找得到**。CurseForge API key 是選用的，只有「其他地方都沒有」的模組才需要。
-- **不轉載任何檔案。** 清單裡只有連結，沒有檔案本身，你的伺服器不會散布別人的模組。
-- **`/automodfetcher export` 匯出整合包**，一個指令同時產生 Modrinth（`.mrpack`）和 CurseForge 兩種格式。新玩家匯入一個檔案，Fabric、所有模組、以及這個模組全部到位。
-- **`/automodfetcher reload`** 不重啟就能重建清單，並且會告訴你哪些 jar 放進資料夾了卻沒真的在跑。
+*   🔍 **智慧網址解析：** 系統會優先使用雜湊值比對 Modrinth，接著比對名稱與版本號。**即使你是從 CurseForge 下載的 `.jar` 也能成功解析**。（CurseForge API key 為選用配置，僅在處理獨占模組時需要）。
+*   ⚖️ **尊重版權，不轉載：** 清單中只包含下載連結，不包含檔案本體。伺服器絕不會違規散布別人的心血。
+*   📦 **一鍵匯出整合包：** 輸入 `/automodfetcher export` 即可同時產生 `.mrpack` (Modrinth) 與 CurseForge 兩種格式的整合包檔，方便發送給全新玩家。
+*   🔄 **熱重載支援：** 透過 `/automodfetcher reload` 指令，無需重啟伺服器即可重建下載清單，並會提示你資料夾中未生效的幽靈模組。
 
-#### 官方啟動器也能用
-
-官方 Minecraft 啟動器**完全不支援任何整合包格式**。對使用它的玩家來說，這個模組是唯一能同步伺服器模組的方法——裝好 Fabric、放進兩個 jar，之後全部自動。
+### 💡 官方啟動器的救星
+官方 Minecraft 啟動器**完全不支援任何整合包格式**。有了 AutoModFetcher，使用官方啟動器的玩家只需安裝 Fabric 並放入兩個 jar（Fabric API 與 本模組），剩下的全自動搞定。
 
 ---
 
-#### 需求
+### 📋 系統需求與重要須知
 
-- Minecraft **1.20.1**、Fabric
-- **Fabric API**
-- **伺服器與客戶端兩邊都要安裝**
-- 僅支援專用伺服器（單人開的 LAN 世界不受影響）
+*   **環境需求：** Minecraft **1.20.1** | Fabric Loader | **Fabric API**
+*   **安裝位置：** 必須同時安裝於 **伺服器端** 與 **客戶端**（僅支援專屬伺服器，單人 LAN 區域網路無效）。
+*   **必須重新啟動：** 由於 Java 類別載入的底層機制，遊戲僅會在啟動時掃描 `mods` 資料夾。下載完成後必須重啟遊戲以載入新模組。
+*   **第三方下載限制：** 若模組作者關閉第三方下載權限，任何工具皆無法直接下載。遇到此情況，玩家會獲得前往該模組頁面的連結。
+*   **檔案清理機制：** 被伺服器移除的模組會在玩家的「下一次啟動時」才被刪除，因為執行中的 Java 程式無法刪除正在使用的 `.jar` 檔。
 
-#### 做不到的事
-
-把邊界講清楚：
-
-- **安裝後必須重啟遊戲。** Fabric 在啟動時掃描 mods 資料夾，執行中的遊戲無法改變這件事。
-- **有些模組根本無法配送。** 作者關閉第三方下載時，任何工具都不該提供他的檔案，我們只能給你他的頁面連結。管理員選模組時值得把這點納入考量。
-- **移除在下次啟動時執行**，因為執行中的遊戲無法刪除已載入的 jar。
-
-#### 授權
-
-All Rights Reserved。可自由使用（含營利伺服器），也可收錄進整合包與伺服器整合包（需註明並附官方連結）。不可單獨轉載。
+**授權規範：** All Rights Reserved。歡迎自由使用（包含商業/營利伺服器），亦允許在標明出處及附上連結的前提下收錄於整合包中。禁止將本模組單獨重新發布或轉載。
