@@ -49,7 +49,7 @@ Use `/automodfetcher reload` to rebuild the manifest without restarting the serv
 
 ## 📋 Requirements & Important Notes
 
-*   **Requirements:** Minecraft **1.20.1** | Fabric Loader | **Fabric API**
+*   **Requirements:** Minecraft **1.20.1** or **1.21.1** | Fabric Loader | **Fabric API**
 *   **Installation:** Must be installed on **both** the Server and the Client (Dedicated servers only; LAN worlds are not supported).
 *   **Restart is Mandatory:** Due to how Java class loading works, Fabric only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code.
 *   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that. Players will receive a direct link to download it manually.

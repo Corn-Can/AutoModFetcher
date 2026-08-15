@@ -49,7 +49,11 @@ public class ModSyncProgressScreen extends Screen {
 
 	@Override
 	public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+		//? if >=1.20.2 {
+		/*this.renderBackground(context, mouseX, mouseY, delta);
+		*///?} else {
 		this.renderBackground(context);
+		//?}
 		super.render(context, mouseX, mouseY, delta);
 
 		context.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFFFF);
@@ -123,6 +127,16 @@ public class ModSyncProgressScreen extends Screen {
 		return lines;
 	}
 
+	//? if >=1.20.2 {
+	/*@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+		if (list.mouseScrolled(vertical)) {
+			return true;
+		}
+
+		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
+	}
+	*///?} else {
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
 		if (list.mouseScrolled(amount)) {
@@ -131,6 +145,7 @@ public class ModSyncProgressScreen extends Screen {
 
 		return super.mouseScrolled(mouseX, mouseY, amount);
 	}
+	//?}
 
 	@Override
 	public boolean shouldCloseOnEsc() {

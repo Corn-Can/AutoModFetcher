@@ -1,5 +1,6 @@
 package com.corncan.automodfetcher.client;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -10,14 +11,17 @@ import com.corncan.automodfetcher.client.gui.ModSyncProgressScreen;
 import com.corncan.automodfetcher.network.Channels;
 import com.corncan.automodfetcher.network.ModManifest;
 
+//? if <1.20.2 {
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
+//?}
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.client.multiplayer.ServerData;
@@ -59,11 +63,26 @@ public final class ClientNetworking {
 	}
 
 	/**
-	 * The login handler knows which server it is talking to; {@code getCurrentServer()} does
-	 * not yet, because the game only records that once a world is being joined. Reading it
-	 * here is why the access widener exists.
+	 * Works out which server we are talking to. {@code Minecraft.getCurrentServer()} cannot
+	 * answer this yet on any version — it reads through the play-phase connection, which does
+	 * not exist during login — so both branches below go around it, and that is why the
+	 * access widener exists.
 	 */
 	private static void rememberServer(ClientHandshakePacketListenerImpl handler) {
+		//? if >=1.20.2 {
+		/*// 1.20.2 stripped the server out of the login handler, so the connect screen is the
+		// only thing left holding it. There is no ServerData to be had here at all; one built
+		// from the address is exactly what "direct connect" would have produced.
+		SocketAddress address = Minecraft.getInstance().screen instanceof ConnectScreen connecting
+				&& connecting.connection != null
+						? connecting.connection.getRemoteAddress()
+						: null;
+
+		lastServerKey = describe(address);
+		lastServer = lastServerKey == null
+				? null
+				: new ServerData(lastServerKey, lastServerKey, ServerData.Type.OTHER);
+		*///?} else {
 		ServerData server = handler.serverData;
 		lastServer = server;
 
@@ -74,8 +93,21 @@ public final class ClientNetworking {
 
 		// No entry to reconnect with, but the socket still names the server well enough to
 		// hang a decision on.
-		SocketAddress address = handler.connection.getRemoteAddress();
-		lastServerKey = address != null ? address.toString() : null;
+		lastServerKey = describe(handler.connection.getRemoteAddress());
+		//?}
+	}
+
+	/**
+	 * Formats an address the way the player typed it, so the key matches what the multiplayer
+	 * list would have produced. {@code toString()} would spell it "localhost/127.0.0.1:25565"
+	 * and quietly key the same server twice.
+	 */
+	private static String describe(SocketAddress address) {
+		if (address instanceof InetSocketAddress inet) {
+			return inet.getHostString() + ":" + inet.getPort();
+		}
+
+		return address != null ? address.toString() : null;
 	}
 
 	public static void register(ClientConfig clientConfig) {
@@ -86,9 +118,15 @@ public final class ClientNetworking {
 		AutoModFetcher.LOGGER.debug("Login query receiver registered on {}: {}", Channels.MANIFEST, registered);
 	}
 
+	// The last parameter is a send listener the handler may register; we never do. Its type
+	// is the only part of this signature Fabric changed between versions.
 	private static CompletableFuture<FriendlyByteBuf> onManifest(Minecraft client,
 			ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf,
+			//? if >=1.20.2 {
+			/*Consumer<net.minecraft.network.PacketSendListener> listenerAdder) {
+			*///?} else {
 			Consumer<GenericFutureListener<? extends Future<? super Void>>> listenerAdder) {
+			//?}
 		// Read the buffer here, on the netty thread: it is recycled the moment this method
 		// returns, so nothing may touch it from the async work below.
 		ModManifest manifest = ModManifest.read(buf);

@@ -11,10 +11,12 @@ base.archivesName = "${property("mod.id")}-fabric"
 // either way and targets the older bytecode, because no JDK 17 is installed here.
 val bytecodeTarget = if (sc.current.parsed >= "1.20.5") 21 else 17
 
-// Loom always resolves runDir against the version project, so a shared directory has to be
-// expressed as a path back out of it rather than as an absolute one.
-fun sharedRunDir(name: String): String =
-	projectDir.toPath().relativize(rootProject.file("run/$name").toPath()).toString()
+// Run directories live at the repository root, one set per node: a world saved by one
+// Minecraft version will not open in another, and a Fabric mods folder is not a Forge one.
+// Loom resolves runDir against the version project, so this has to be a path back out of it.
+fun runDirFor(name: String): String = projectDir.toPath()
+	.relativize(rootProject.file("run/${sc.current.project}/$name").toPath())
+	.toString()
 
 dependencies {
 	minecraft("com.mojang:minecraft:${sc.current.version}")
@@ -28,21 +30,24 @@ dependencies {
 }
 
 loom {
-	accessWidenerPath = rootProject.file("src/main/resources/automodfetcher.accesswidener")
+	// Loom reads this file directly rather than through the source set, so it has to be run
+	// through Stonecutter by hand — otherwise it would still carry the other version's field
+	// names, and every widened field would silently fail to apply.
+	accessWidenerPath = sc.process(
+		rootProject.file("src/main/resources/automodfetcher.accesswidener"),
+		"build/processed.accesswidener")
 
 	runs {
-		// Separate game directories, otherwise the dev client and dev server share one
-		// mods folder and there is never anything to sync. Anchored to the root rather
-		// than the version project so every target reuses the same set-up world, ops
-		// entry and server config instead of starting from nothing.
+		// Separate client and server directories, otherwise the two share one mods
+		// folder and there is never anything to sync.
 		named("client") {
-			runDir = sharedRunDir("client")
+			runDir = runDirFor("client")
 			// Loom randomises the dev username each launch, which makes it impossible to
 			// keep an ops entry pointing at you. Pin it.
 			programArgs("--username", "CornCan")
 		}
 		named("server") {
-			runDir = sharedRunDir("server")
+			runDir = runDirFor("server")
 		}
 	}
 }
@@ -72,6 +77,7 @@ tasks {
 			register("name", "mod.name")
 			register("version", "mod.version")
 			register("minecraft", "mod.mc_compat")
+			register("java", "mod.java")
 		}
 
 		filesMatching("fabric.mod.json") { expand(props) }

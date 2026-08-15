@@ -1,16 +1,33 @@
 accessWidener	v2	named
 
-# Minecraft.getCurrentServer() is still null during the login phase, but the login handler
-# was handed the server it is talking to. Reading it from there is what lets the confirm
-# screen offer to reconnect, and gives a stable key for remembering the player's decision
-# about that server.
+# Nothing here changes the game's behaviour. Every entry exists so this mod can read
+# something the client already knows during login but does not expose.
+#
+# What it needs to know is which server it is talking to, and — if the player is dropped
+# moments after joining — what the server said on the way out. Minecraft.getCurrentServer()
+# cannot answer the first: it reads through the play-phase connection, which does not exist
+# during login.
+#
+# Up to 1.20.1 the login handler itself held the server entry. 1.20.2 removed it, leaving
+# the connect screen's socket as the only thing that still names the server, and 1.21 moved
+# the disconnect message inside DisconnectionDetails. Hence two sets of entries.
+#
+# Stonecutter strips one leading '#' from the branch it activates, so keep prose out of the
+# blocks below — an explanatory line in there would be uncommented into a syntax error.
+
+#? if >=1.20.2 {
+#accessible	field	net/minecraft/client/gui/screens/ConnectScreen	connection	Lnet/minecraft/network/Connection;
+#?}
+
+#? if >=1.21 {
+#accessible	field	net/minecraft/client/gui/screens/DisconnectedScreen	details	Lnet/minecraft/network/DisconnectionDetails;
+#?}
+
+#? if <1.20.2 {
 accessible	field	net/minecraft/client/multiplayer/ClientHandshakePacketListenerImpl	serverData	Lnet/minecraft/client/multiplayer/ServerData;
-
-# Fallback for connections that carry no server entry: the socket address still identifies
-# the server well enough to remember a decision against it.
 accessible	field	net/minecraft/client/multiplayer/ClientHandshakePacketListenerImpl	connection	Lnet/minecraft/network/Connection;
+#?}
 
-# When a player is dropped moments after joining, our own screen replaces the disconnect
-# screen — so it has to carry the server's message across, or we would be hiding the only
-# thing the server actually said.
+#? if <1.21 {
 accessible	field	net/minecraft/client/gui/screens/DisconnectedScreen	reason	Lnet/minecraft/network/chat/Component;
+#?}

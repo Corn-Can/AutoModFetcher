@@ -1,10 +1,11 @@
 # AutoModFetcher (自動模組同步器)
 
 ## 📖 專案簡介
-AutoModFetcher 是一個基於 Fabric (Mojang official mappings, **MC 1.20.1**) 的「引導型模組 (Bootstrap Mod)」。
+AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型模組 (Bootstrap Mod)」。
 
-> 版本組合：MC 1.20.1 / Mojang official mappings / Loader 0.16.14 / Fabric API 0.92.11+1.20.1 / 目標 Java 17。
-> Gradle daemon 與編譯用 JDK 21（本機沒有 JDK 17），靠 `options.release = 17` 產生 Java 17 相容的 class 檔。
+> **目前的建置目標**：Fabric **1.20.1**（Java 17）與 Fabric **1.21.1**（Java 21）。
+> 每個目標的 loader 版本、Fabric API 版本與相容範圍都寫在 `stonecutter.properties.toml`。
+> Gradle daemon 與編譯用 JDK 21（本機沒有 JDK 17），靠 `options.release` 產生對應版本的 class 檔。
 >
 > **為什麼不是 Yarn**：Yarn 只到 1.21.11，而 NeoForge 原生就用 Mojang 的名字。要同時支援
 > Fabric 與 NeoForge、又要能往上跟到新版本，Mojang mappings 是唯一走得通的選擇。原始碼裡的
@@ -22,6 +23,8 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings, **MC 1.20.1**) 
 *   **為什麼是 login 階段，不是 Join。**
     這是與初版構想最重要的差異。若伺服器裝了會註冊方塊/物品的模組，缺模組的客戶端會在進入 play 階段時被踢掉，**根本走不到 Join 事件**。
     1.20.1 沒有 configuration 階段（那是 1.20.2 才加入的），login query 是唯一能搶在 play 階段之前執行的掛勾點。
+    1.21.1 雖然有 configuration 階段，但 **login query 比它更早**，而且 Fabric API 到今天仍然提供這組 API——
+    兩個版本共用同一條路徑，比為了新機制而分岔要少得多。
 *   **流程:**
     1. 伺服器在 `ServerLoginConnectionEvents.QUERY_START` 送出清單。
     2. 客戶端在 netty 執行緒上**立即把 buffer 讀成物件**（buffer 一離開 handler 就會被回收），然後回傳一個未完成的 `CompletableFuture` —— 這會把 login 卡住，正好給我們比對本地 mods 的時間。
@@ -150,19 +153,39 @@ src/main/
 ## 🧪 開發與測試
 
 ```bash
-./gradlew build                             # 建置目前啟用的節點
-./gradlew buildAndCollect                   # 同上，並把 jar 收到 build/libs/<mod 版本>/
-./gradlew :1.20.1-fabric:runServer          # run/server/
-./gradlew :1.20.1-fabric:runClient          # run/client/
-./gradlew "Set active project to 1.20.1-fabric"   # 切換啟用節點
+./gradlew buildAll                          # 建置全部節點，jar 收到 build/libs/<mod 版本>/
+./gradlew build                             # 只建置目前啟用的節點
+./gradlew :1.21.1-fabric:runServer          # run/1.21.1-fabric/server/
+./gradlew :1.21.1-fabric:runClient          # run/1.21.1-fabric/client/
+./gradlew "Set active project to 1.21.1-fabric"   # 切換 IDE 看到的版本
 ```
 
-節點名稱是 `<MC 版本>-<loader>`。run 目錄刻意指回專案根目錄的 `run/`，
-所以切換節點時世界、ops、伺服器設定都還在，不必每次重新架一次。
+節點名稱是 `<MC 版本>-<loader>`。**「啟用哪個節點」只影響 IDE 看到的原始碼**——
+每個節點編譯時都會把原始碼處理成自己的一份放進 `versions/<節點>/build/`，
+所以 `buildAll` 不必來回切換就能一次建出全部。
 
-client 與 server 的 run 目錄刻意分開，否則兩邊共用同一個 `mods/` 就永遠沒有差異可測。
-把要測的模組丟進 `run/server/mods/`，然後用 dev client 連 `localhost`
+run 目錄按節點分開（`run/<節點>/{client,server}`）：不同 MC 版本的世界存檔不相容，
+不同 loader 的模組 jar 也不是同一批。client 與 server 也分開，否則兩邊共用同一個 `mods/`
+就永遠沒有差異可測。把要測的模組丟進 `run/<節點>/server/mods/`，然後用 dev client 連 `localhost`
 （`--args="--quickPlayMultiplayer localhost"` 可以讓 dev client 開機直接連線，省掉手動點）。
+
+### 版本差異怎麼寫
+
+用 Stonecutter 註解，不要用 `if (version >= ...)`——後者會把兩個版本的 API 同時編進來，根本編不過。
+
+```java
+//? if >=1.20.2 {
+this.renderBackground(context, mouseX, mouseY, delta);
+//?} else {
+/*this.renderBackground(context);
+*///?}
+```
+
+被停用的那一段要**自己**用 `/* */` 包起來。Stonecutter 只做切換，不會幫你把沒包的程式碼補上註解——
+沒包就是兩段都編譯，然後編譯失敗。
+
+`automodfetcher.accesswidener` 也走同一套，但註解字元是 `#`，而且**切換時只會脫掉一個 `#`**。
+所以條件區塊裡只能放 accessible 指令，說明文字要寫在區塊外——寫在裡面會被脫成語法錯誤。
 
 ### 除錯：登入卡住不動
 

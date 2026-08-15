@@ -76,9 +76,18 @@ public class ModSyncConfirmScreen extends Screen {
 		// Offered rather than assumed. Agreeing once is not the same as agreeing always, and
 		// quietly turning the first into the second is not ours to do.
 		if (plan.isFullyAutomatic()) {
+			//? if >=1.20.5 {
+			/*rememberChoice = this.addRenderableWidget(Checkbox
+					.builder(Component.translatable("automodfetcher.confirm.remember"), this.font)
+					.pos(this.width / 2 - 100, this.height - 64)
+					.maxWidth(200)
+					.selected(false)
+					.build());
+			*///?} else {
 			rememberChoice = this.addRenderableWidget(new Checkbox(this.width / 2 - 100,
 					this.height - 64, 200, 20,
 					Component.translatable("automodfetcher.confirm.remember"), false));
+			//?}
 		}
 
 		// Removals alone are still work to apply, so the action button must appear for them too.
@@ -194,7 +203,13 @@ public class ModSyncConfirmScreen extends Screen {
 			return;
 		}
 
-		ConnectScreen.startConnecting(new TitleScreen(), this.minecraft, ServerAddress.parseString(server.ip), server, false);
+		//? if >=1.20.5 {
+		/*ConnectScreen.startConnecting(new TitleScreen(), this.minecraft,
+				ServerAddress.parseString(server.ip), server, false, null);
+		*///?} else {
+		ConnectScreen.startConnecting(new TitleScreen(), this.minecraft,
+				ServerAddress.parseString(server.ip), server, false);
+		//?}
 	}
 
 	private void openModsFolder() {
@@ -217,7 +232,11 @@ public class ModSyncConfirmScreen extends Screen {
 	@Override
 	public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
 		// 1.20.1's Screen#render only draws the widgets; the backdrop is ours to draw.
+		//? if >=1.20.2 {
+		/*this.renderBackground(context, mouseX, mouseY, delta);
+		*///?} else {
 		this.renderBackground(context);
+		//?}
 		super.render(context, mouseX, mouseY, delta);
 
 		context.drawCenteredString(this.font, this.title, this.width / 2, 18, 0xFFFFFFFF);
@@ -265,6 +284,16 @@ public class ModSyncConfirmScreen extends Screen {
 		return super.mouseClicked(mouseX, mouseY, button);
 	}
 
+	//? if >=1.20.2 {
+	/*@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+		if (list.mouseScrolled(vertical)) {
+			return true;
+		}
+
+		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
+	}
+	*///?} else {
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
 		if (list.mouseScrolled(amount)) {
@@ -273,6 +302,7 @@ public class ModSyncConfirmScreen extends Screen {
 
 		return super.mouseScrolled(mouseX, mouseY, amount);
 	}
+	//?}
 
 	@Override
 	public void onClose() {

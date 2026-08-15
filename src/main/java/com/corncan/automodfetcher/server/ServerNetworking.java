@@ -70,7 +70,12 @@ public final class ServerNetworking {
 		return manifest;
 	}
 
-	private static void onQueryStart(ServerLoginPacketListenerImpl handler, MinecraftServer server, PacketSender sender,
+	private static void onQueryStart(ServerLoginPacketListenerImpl handler, MinecraftServer server,
+			//? if >=1.20.2 {
+			/*net.fabricmc.fabric.api.networking.v1.LoginPacketSender sender,
+			*///?} else {
+			PacketSender sender,
+			//?}
 			ServerLoginNetworking.LoginSynchronizer synchronizer) {
 		ModManifest current = manifest;
 

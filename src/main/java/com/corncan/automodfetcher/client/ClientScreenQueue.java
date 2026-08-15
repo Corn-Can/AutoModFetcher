@@ -57,7 +57,12 @@ public final class ClientScreenQueue {
 		}
 
 		if (client.screen instanceof DisconnectedScreen disconnected) {
-			client.setScreen(factory != null ? factory.apply(disconnected.reason) : target);
+			//? if >=1.21 {
+			/*Component reason = disconnected.details.reason();
+			*///?} else {
+			Component reason = disconnected.reason;
+			//?}
+			client.setScreen(factory != null ? factory.apply(reason) : target);
 			clear();
 			return;
 		}

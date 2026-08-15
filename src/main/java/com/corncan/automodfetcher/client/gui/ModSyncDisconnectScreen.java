@@ -58,9 +58,14 @@ public class ModSyncDisconnectScreen extends Screen {
 
 		// Wrapped rather than drawn as one line: the reason is whatever the server sent, and
 		// a raw exception message runs straight off both edges of the window.
+		//? if >=1.20.2 {
+		/*reasonLines = MultiLineLabel.create(this.font, listWidth, REASON_MAX_LINES,
+				Component.translatable("automodfetcher.kicked.server_said", serverReason));
+		*///?} else {
 		reasonLines = MultiLineLabel.create(this.font,
 				Component.translatable("automodfetcher.kicked.server_said", serverReason),
 				listWidth, REASON_MAX_LINES);
+		//?}
 
 		causeY = REASON_TOP + reasonLines.getLineCount() * REASON_LINE_HEIGHT + 6;
 
@@ -119,7 +124,11 @@ public class ModSyncDisconnectScreen extends Screen {
 
 	@Override
 	public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+		//? if >=1.20.2 {
+		/*this.renderBackground(context, mouseX, mouseY, delta);
+		*///?} else {
 		this.renderBackground(context);
+		//?}
 		super.render(context, mouseX, mouseY, delta);
 
 		context.drawCenteredString(this.font, this.title, this.width / 2, 18, 0xFFFFFFFF);
@@ -152,6 +161,16 @@ public class ModSyncDisconnectScreen extends Screen {
 		return super.mouseClicked(mouseX, mouseY, button);
 	}
 
+	//? if >=1.20.2 {
+	/*@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+		if (list.mouseScrolled(vertical)) {
+			return true;
+		}
+
+		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
+	}
+	*///?} else {
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
 		if (list.mouseScrolled(amount)) {
@@ -160,6 +179,7 @@ public class ModSyncDisconnectScreen extends Screen {
 
 		return super.mouseScrolled(mouseX, mouseY, amount);
 	}
+	//?}
 
 	@Override
 	public void onClose() {

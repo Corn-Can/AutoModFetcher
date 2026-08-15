@@ -88,7 +88,11 @@ public class ModSyncCompleteScreen extends Screen {
 
 	@Override
 	public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+		//? if >=1.20.2 {
+		/*this.renderBackground(context, mouseX, mouseY, delta);
+		*///?} else {
 		this.renderBackground(context);
+		//?}
 		super.render(context, mouseX, mouseY, delta);
 
 		int centerY = this.height / 2 - 50;

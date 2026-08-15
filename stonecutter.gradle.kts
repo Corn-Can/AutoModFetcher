@@ -17,3 +17,13 @@ stonecutter parameters {
 		match(loader, "fabric", "forge", "neoforge")
 	}
 }
+
+// Builds every node, not just the active one. Stonecutter switches the source tree between
+// them, so this cannot be done by depending on the build tasks directly.
+stonecutter.tasks.order("buildAndCollect")
+
+tasks.register("buildAll") {
+	group = "build"
+	description = "Builds every version and loader, collecting the jars in build/libs/<mod version>/"
+	dependsOn(stonecutter.tasks.named("buildAndCollect").map { it.values })
+}

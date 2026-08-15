@@ -16,4 +16,15 @@ mod.mc_releases = ["1.20.1"]
 # Pinned, not a range. The login query phase this mod hooks was removed in 1.20.2, so a
 # build that advertised 1.20.x would install, load, and silently do nothing.
 mod.mc_compat = "1.20.1"
+mod.java = ">=17"
 deps.fabric_api = "0.92.11+1.20.1"
+
+["1.21.1"]
+mod.mc_releases = ["1.21.1"]
+
+[fabric."1.21.1"]
+# Pinned for the same reason the 1.20.1 build is: this jar is compiled against one set of
+# names, and the only honest compatibility claim is the version it was built for.
+mod.mc_compat = "1.21.1"
+mod.java = ">=21"
+deps.fabric_api = "0.116.15+1.21.1"
