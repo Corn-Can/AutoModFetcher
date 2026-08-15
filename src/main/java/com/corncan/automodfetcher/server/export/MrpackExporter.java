@@ -154,10 +154,13 @@ public final class MrpackExporter {
 			return 1;
 		}
 
+		// Normal for a build that is not on a platform yet, and it fixes itself once one is:
+		// the jar resolves by hash like any other mod from then on.
 		AutoModFetcher.LOGGER.warn(
-				"This mod's own jar is not on Modrinth and selfDownloadUrl is unset, so the pack "
-						+ "cannot contain it. Anyone importing it gets today's mods and no way to "
-						+ "receive later changes.");
+				"Leaving AutoModFetcher out of the pack — this build is not published anywhere and "
+						+ "selfDownloadUrl is unset. Anyone importing it gets today's mods and no way "
+						+ "to receive later changes. Publish the version, or set selfDownloadUrl to a "
+						+ "direct link to the jar (a project page will not work).");
 		return 0;
 	}
 
