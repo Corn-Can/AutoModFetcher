@@ -1,6 +1,6 @@
 package com.corncan.automodfetcher.network;
 
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 
 /**
  * One mod file the server expects clients to have.
@@ -9,23 +9,23 @@ import net.minecraft.network.PacketByteBuf;
  * client verifies a finished download against.
  */
 public record ModEntry(String fileName, String sha1, String sha512, long size, String url, ModSide side) {
-	public void write(PacketByteBuf buf) {
-		buf.writeString(fileName);
-		buf.writeString(sha1);
-		buf.writeString(sha512);
+	public void write(FriendlyByteBuf buf) {
+		buf.writeUtf(fileName);
+		buf.writeUtf(sha1);
+		buf.writeUtf(sha512);
 		buf.writeVarLong(size);
-		buf.writeString(url);
-		buf.writeEnumConstant(side);
+		buf.writeUtf(url);
+		buf.writeEnum(side);
 	}
 
-	public static ModEntry read(PacketByteBuf buf) {
+	public static ModEntry read(FriendlyByteBuf buf) {
 		return new ModEntry(
-				buf.readString(),
-				buf.readString(),
-				buf.readString(),
+				buf.readUtf(),
+				buf.readUtf(),
+				buf.readUtf(),
 				buf.readVarLong(),
-				buf.readString(),
-				buf.readEnumConstant(ModSide.class)
+				buf.readUtf(),
+				buf.readEnum(ModSide.class)
 		);
 	}
 }

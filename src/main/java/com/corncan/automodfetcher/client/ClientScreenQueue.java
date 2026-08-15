@@ -4,10 +4,10 @@ import java.util.function.Function;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.DisconnectedScreen;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 /**
  * Puts our screen up once the server has ended the login.
@@ -26,7 +26,7 @@ public final class ClientScreenQueue {
 	private static final int GUARD_TICKS = 200;
 
 	private static volatile Screen pending;
-	private static volatile Function<Text, Screen> pendingFactory;
+	private static volatile Function<Component, Screen> pendingFactory;
 	private static int guard;
 
 	private ClientScreenQueue() {
@@ -42,21 +42,21 @@ public final class ClientScreenQueue {
 	 * Builds the screen from the disconnect reason once it is known, so ours can quote what
 	 * the server actually said instead of discarding it.
 	 */
-	public static void showWithReason(Function<Text, Screen> factory) {
+	public static void showWithReason(Function<Component, Screen> factory) {
 		pending = null;
 		pendingFactory = factory;
 		guard = GUARD_TICKS;
 	}
 
-	public static void tick(MinecraftClient client) {
+	public static void tick(Minecraft client) {
 		Screen target = pending;
-		Function<Text, Screen> factory = pendingFactory;
+		Function<Component, Screen> factory = pendingFactory;
 
 		if (target == null && factory == null) {
 			return;
 		}
 
-		if (client.currentScreen instanceof DisconnectedScreen disconnected) {
+		if (client.screen instanceof DisconnectedScreen disconnected) {
 			client.setScreen(factory != null ? factory.apply(disconnected.reason) : target);
 			clear();
 			return;

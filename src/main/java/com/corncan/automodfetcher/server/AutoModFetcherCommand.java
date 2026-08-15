@@ -9,11 +9,11 @@ import com.corncan.automodfetcher.server.export.MrpackExporter;
 import com.corncan.automodfetcher.util.ModPaths;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 
 public final class AutoModFetcherCommand {
 	private AutoModFetcherCommand() {
@@ -21,15 +21,15 @@ public final class AutoModFetcherCommand {
 
 	public static void register() {
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
-				dispatcher.register(CommandManager.literal("automodfetcher")
-						.requires(source -> source.hasPermissionLevel(2))
-						.then(CommandManager.literal("reload")
+				dispatcher.register(Commands.literal("automodfetcher")
+						.requires(source -> source.hasPermission(2))
+						.then(Commands.literal("reload")
 								.executes(context -> reload(context.getSource())))
-						.then(CommandManager.literal("export")
+						.then(Commands.literal("export")
 								.executes(context -> exportAll(context.getSource()))
-								.then(CommandManager.literal("modrinth")
+								.then(Commands.literal("modrinth")
 										.executes(context -> exportMrpack(context.getSource())))
-								.then(CommandManager.literal("curseforge")
+								.then(Commands.literal("curseforge")
 										.executes(context -> exportCursePack(context.getSource()))))));
 	}
 
@@ -39,10 +39,10 @@ public final class AutoModFetcherCommand {
 	 * <p>Runs off the server thread: resolving can mean waiting on two platforms, and nobody
 	 * should have to watch the world freeze for it.
 	 */
-	private static int reload(ServerCommandSource source) {
+	private static int reload(CommandSourceStack source) {
 		MinecraftServer server = source.getServer();
 
-		source.sendFeedback(() -> Text.translatable("automodfetcher.command.reloading"), true);
+		source.sendSuccess(() -> Component.translatable("automodfetcher.command.reloading"), true);
 
 		Thread worker = new Thread(() -> {
 			try {
@@ -55,8 +55,8 @@ public final class AutoModFetcherCommand {
 				// Without this the thread dies quietly and whoever ran the command is left
 				// watching "rebuilding..." forever, with the reason only in the log.
 				AutoModFetcher.LOGGER.error("Reload failed", e);
-				server.execute(() -> source.sendError(
-						Text.literal("Reload failed: " + e + " — see the server log.")));
+				server.execute(() -> source.sendFailure(
+						Component.literal("Reload failed: " + e + " — see the server log.")));
 			}
 		}, "AutoModFetcher-reload");
 
@@ -66,14 +66,14 @@ public final class AutoModFetcherCommand {
 		return 1;
 	}
 
-	private static void report(ServerCommandSource source, ModManifest rebuilt, List<String> notRunning) {
+	private static void report(CommandSourceStack source, ModManifest rebuilt, List<String> notRunning) {
 		if (rebuilt == null) {
-			source.sendError(Text.literal("Reload finished with no mod list — sync may be disabled, "
+			source.sendFailure(Component.literal("Reload finished with no mod list — sync may be disabled, "
 					+ "or the rebuild failed. Check the log."));
 			return;
 		}
 
-		source.sendFeedback(() -> Text.literal("Mod list rebuilt: " + rebuilt.entries().size()
+		source.sendSuccess(() -> Component.literal("Mod list rebuilt: " + rebuilt.entries().size()
 				+ " resolved, " + rebuilt.unresolved().size() + " unresolved"), true);
 
 		// The part an operator will not guess: mods cannot be hot-loaded, so a jar added just
@@ -88,26 +88,26 @@ public final class AutoModFetcherCommand {
 	 * Modrinth pack, and a Modrinth pack cannot carry a mod whose author blocked third-party
 	 * downloads. An operator who exports only one has left half their players out.
 	 */
-	private static int exportAll(ServerCommandSource source) {
+	private static int exportAll(CommandSourceStack source) {
 		int written = exportMrpack(source);
 
 		if (ServerSyncConfig.load().curseforgeApiKey.isBlank()) {
-			source.sendFeedback(() -> Text.literal(
+			source.sendSuccess(() -> Component.literal(
 					"Skipped the CurseForge pack: set curseforgeApiKey in " + ServerSyncConfig.FILE_NAME
 							+ " to build one. Players using the CurseForge app cannot import a "
-							+ "Modrinth pack.").formatted(Formatting.YELLOW), false);
+							+ "Modrinth pack.").withStyle(ChatFormatting.YELLOW), false);
 			return written;
 		}
 
 		return written + exportCursePack(source);
 	}
 
-	private static int exportCursePack(ServerCommandSource source) {
+	private static int exportCursePack(CommandSourceStack source) {
 		try {
 			CurseForgePackExporter.Result result = CurseForgePackExporter.export(ServerSyncConfig.load());
 
-			source.sendFeedback(() -> Text.literal("Wrote " + result.included() + " mod(s) to ")
-					.append(Text.literal(result.file().toString()).formatted(Formatting.AQUA)), true);
+			source.sendSuccess(() -> Component.literal("Wrote " + result.included() + " mod(s) to ")
+					.append(Component.literal(result.file().toString()).withStyle(ChatFormatting.AQUA)), true);
 
 			warnAbout(source, result.omitted(),
 					" are not on CurseForge, so the CurseForge pack cannot include them: ");
@@ -118,16 +118,16 @@ public final class AutoModFetcherCommand {
 			return 1;
 		} catch (Exception e) {
 			AutoModFetcher.LOGGER.error("CurseForge pack export failed", e);
-			source.sendError(Text.literal("CurseForge export failed: " + e.getMessage()));
+			source.sendFailure(Component.literal("CurseForge export failed: " + e.getMessage()));
 			return 0;
 		}
 	}
 
-	private static int exportMrpack(ServerCommandSource source) {
+	private static int exportMrpack(CommandSourceStack source) {
 		ModManifest manifest = ServerNetworking.currentManifest();
 
 		if (manifest == null) {
-			source.sendError(Text.literal("No mod list is available yet. Sync may be disabled, "
+			source.sendFailure(Component.literal("No mod list is available yet. Sync may be disabled, "
 					+ "or the server is still resolving downloads."));
 			return 0;
 		}
@@ -135,8 +135,8 @@ public final class AutoModFetcherCommand {
 		try {
 			MrpackExporter.Result result = MrpackExporter.export(manifest, ServerSyncConfig.load());
 
-			source.sendFeedback(() -> Text.literal("Wrote " + result.included() + " mod(s) to ")
-					.append(Text.literal(result.file().toString()).formatted(Formatting.AQUA)), true);
+			source.sendSuccess(() -> Component.literal("Wrote " + result.included() + " mod(s) to ")
+					.append(Component.literal(result.file().toString()).withStyle(ChatFormatting.AQUA)), true);
 
 			// Both of these change what a player actually receives, so they are said out loud
 			// rather than left in a log the operator may never open.
@@ -149,17 +149,17 @@ public final class AutoModFetcherCommand {
 			return 1;
 		} catch (Exception e) {
 			AutoModFetcher.LOGGER.error("Modpack export failed", e);
-			source.sendError(Text.literal("Export failed: " + e.getMessage()));
+			source.sendFailure(Component.literal("Export failed: " + e.getMessage()));
 			return 0;
 		}
 	}
 
-	private static void warnAbout(ServerCommandSource source, List<String> fileNames, String message) {
+	private static void warnAbout(CommandSourceStack source, List<String> fileNames, String message) {
 		if (fileNames.isEmpty()) {
 			return;
 		}
 
-		source.sendFeedback(() -> Text.literal(fileNames.size() + message + String.join(", ", fileNames))
-				.formatted(Formatting.YELLOW), false);
+		source.sendSuccess(() -> Component.literal(fileNames.size() + message + String.join(", ", fileNames))
+				.withStyle(ChatFormatting.YELLOW), false);
 	}
 }

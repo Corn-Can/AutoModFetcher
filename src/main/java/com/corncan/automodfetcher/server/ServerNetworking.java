@@ -9,10 +9,10 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.text.Text;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 
 public final class ServerNetworking {
 	private static volatile ModManifest manifest;
@@ -36,7 +36,7 @@ public final class ServerNetworking {
 	private static void onServerStarted(MinecraftServer server) {
 		// Only dedicated servers hand mods out. On an integrated server the "client" is
 		// already running from the very same mods folder, so there is nothing to sync.
-		if (!server.isDedicated()) {
+		if (!server.isDedicatedServer()) {
 			return;
 		}
 
@@ -70,7 +70,7 @@ public final class ServerNetworking {
 		return manifest;
 	}
 
-	private static void onQueryStart(ServerLoginNetworkHandler handler, MinecraftServer server, PacketSender sender,
+	private static void onQueryStart(ServerLoginPacketListenerImpl handler, MinecraftServer server, PacketSender sender,
 			ServerLoginNetworking.LoginSynchronizer synchronizer) {
 		ModManifest current = manifest;
 
@@ -78,7 +78,7 @@ public final class ServerNetworking {
 			return;
 		}
 
-		PacketByteBuf buf = PacketByteBufs.create();
+		FriendlyByteBuf buf = PacketByteBufs.create();
 		current.write(buf);
 		sender.sendPacket(Channels.MANIFEST, buf);
 
@@ -86,8 +86,8 @@ public final class ServerNetworking {
 				current.entries().size(), buf.readableBytes());
 	}
 
-	private static void onResponse(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood,
-			PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer synchronizer, PacketSender responseSender) {
+	private static void onResponse(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood,
+			FriendlyByteBuf buf, ServerLoginNetworking.LoginSynchronizer synchronizer, PacketSender responseSender) {
 		// A client without AutoModFetcher answers "not understood"; it must connect exactly
 		// as it would if this mod were not installed at all.
 		if (!understood) {
@@ -101,6 +101,6 @@ public final class ServerNetworking {
 
 		// The client has already put its own update screen up; ending the login here is what
 		// stops it from being dropped later with a generic mod-mismatch error instead.
-		handler.disconnect(Text.translatable("automodfetcher.disconnect.updating"));
+		handler.disconnect(Component.translatable("automodfetcher.disconnect.updating"));
 	}
 }

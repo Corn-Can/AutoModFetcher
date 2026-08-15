@@ -3,7 +3,7 @@ package com.corncan.automodfetcher.network;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 
 /**
  * The server's mod manifest, sent once per connection during the login query phase.
@@ -18,7 +18,7 @@ public record ModManifest(List<ModEntry> entries, List<ManualEntry> unresolved) 
 		return entries.isEmpty() && unresolved.isEmpty();
 	}
 
-	public void write(PacketByteBuf buf) {
+	public void write(FriendlyByteBuf buf) {
 		buf.writeVarInt(entries.size());
 
 		for (ModEntry entry : entries) {
@@ -32,7 +32,7 @@ public record ModManifest(List<ModEntry> entries, List<ManualEntry> unresolved) 
 		}
 	}
 
-	public static ModManifest read(PacketByteBuf buf) {
+	public static ModManifest read(FriendlyByteBuf buf) {
 		int entryCount = buf.readVarInt();
 		List<ModEntry> entries = new ArrayList<>(entryCount);
 

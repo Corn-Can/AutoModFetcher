@@ -5,9 +5,9 @@ import java.util.List;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 
 /**
  * A plain scrolling list of text lines, some of which can be links.
@@ -20,7 +20,7 @@ public class LineList {
 	private static final int LINE_HEIGHT = 12;
 
 	/** @param url when set, the line is clickable and drawn as a link */
-	public record Line(Text text, int color, String url) {
+	public record Line(Component text, int color, String url) {
 		public static final int WHITE = 0xFFFFFFFF;
 		public static final int GREY = 0xFFA0A0A0;
 		public static final int RED = 0xFFFF5555;
@@ -29,11 +29,11 @@ public class LineList {
 		public static final int LINK = 0xFF6AB7FF;
 		public static final int LINK_HOVER = 0xFFB0DDFF;
 
-		public static Line of(Text text, int color) {
+		public static Line of(Component text, int color) {
 			return new Line(text, color, null);
 		}
 
-		public static Line link(Text text, String url) {
+		public static Line link(Component text, String url) {
 			return new Line(text, LINK, url);
 		}
 
@@ -63,7 +63,7 @@ public class LineList {
 		scroll = Math.min(scroll, maxScroll());
 	}
 
-	public void render(DrawContext context, TextRenderer textRenderer, int mouseX, int mouseY) {
+	public void render(GuiGraphics context, Font font, int mouseX, int mouseY) {
 		context.fill(x - 4, y - 4, x + width + 4, y + height + 4, 0x60000000);
 		context.enableScissor(x, y, x + width, y + height);
 
@@ -80,11 +80,11 @@ public class LineList {
 			}
 
 			int color = line.isLink() && isHovered ? Line.LINK_HOVER : line.color();
-			context.drawTextWithShadow(textRenderer, line.text(), x, lineY, color);
+			context.drawString(font, line.text(), x, lineY, color);
 
 			if (line.isLink()) {
 				int underlineY = lineY + 9;
-				int textWidth = textRenderer.getWidth(line.text());
+				int textWidth = font.width(line.text());
 				context.fill(x, underlineY, x + textWidth, underlineY + 1, color);
 			}
 		}
@@ -96,7 +96,7 @@ public class LineList {
 		}
 	}
 
-	private void renderScrollbar(DrawContext context) {
+	private void renderScrollbar(GuiGraphics context) {
 		int trackX = x + width + 1;
 		int thumbHeight = Math.max(16, (int) ((float) height * height / (lines.size() * LINE_HEIGHT)));
 		int travel = height - thumbHeight;

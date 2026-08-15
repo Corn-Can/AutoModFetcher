@@ -1,6 +1,6 @@
 package com.corncan.automodfetcher.network;
 
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 
 /**
  * A mod the server could not supply a download for, so the player has to fetch it.
@@ -24,13 +24,13 @@ public record ManualEntry(String fileName, String sha512, String pageUrl) {
 		return !pageUrl.isBlank();
 	}
 
-	public void write(PacketByteBuf buf) {
-		buf.writeString(fileName);
-		buf.writeString(sha512);
-		buf.writeString(pageUrl);
+	public void write(FriendlyByteBuf buf) {
+		buf.writeUtf(fileName);
+		buf.writeUtf(sha512);
+		buf.writeUtf(pageUrl);
 	}
 
-	public static ManualEntry read(PacketByteBuf buf) {
-		return new ManualEntry(buf.readString(), buf.readString(), buf.readString());
+	public static ManualEntry read(FriendlyByteBuf buf) {
+		return new ManualEntry(buf.readUtf(), buf.readUtf(), buf.readUtf());
 	}
 }

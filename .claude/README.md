@@ -1,10 +1,15 @@
 # AutoModFetcher (自動模組同步器)
 
 ## 📖 專案簡介
-AutoModFetcher 是一個基於 Fabric (Yarn mappings, **MC 1.20.1**) 的「引導型模組 (Bootstrap Mod)」。
+AutoModFetcher 是一個基於 Fabric (Mojang official mappings, **MC 1.20.1**) 的「引導型模組 (Bootstrap Mod)」。
 
-> 版本組合：MC 1.20.1 / Yarn 1.20.1+build.10 / Loader 0.16.14 / Fabric API 0.92.11+1.20.1 / 目標 Java 17。
+> 版本組合：MC 1.20.1 / Mojang official mappings / Loader 0.16.14 / Fabric API 0.92.11+1.20.1 / 目標 Java 17。
 > Gradle daemon 與編譯用 JDK 21（本機沒有 JDK 17），靠 `options.release = 17` 產生 Java 17 相容的 class 檔。
+>
+> **為什麼不是 Yarn**：Yarn 只到 1.21.11，而 NeoForge 原生就用 Mojang 的名字。要同時支援
+> Fabric 與 NeoForge、又要能往上跟到新版本，Mojang mappings 是唯一走得通的選擇。原始碼裡的
+> Minecraft 類別名因此是 `Component` / `ResourceLocation` / `GuiGraphics` / `FriendlyByteBuf`，
+> 不是 Yarn 的 `Text` / `Identifier` / `DrawContext` / `PacketByteBuf`。
 
 玩家只要預先安裝這一個模組，連線到伺服器時就會自動比對伺服器的模組清單、下載缺少的模組，最後提示重新啟動遊戲。伺服器端的清單是**自動**從 Modrinth / CurseForge 解析出來的，管理員不必手動維護雜湊與網址。
 
@@ -83,7 +88,7 @@ src/main/
     AutoModFetcherClient.java       client 入口
     PendingOps.java                 待處理檔案操作的資料模型
     PendingOpsApplier.java          preLaunch entrypoint，下次啟動時執行刪除
-    network/                        Channels / ModEntry / ModSide / ModManifest（手寫 PacketByteBuf 序列化）
+    network/                        Channels / ModEntry / ModSide / ModManifest（手寫 FriendlyByteBuf 序列化）
     util/                           Hashing(SHA-1,SHA-512,Murmur2) / JarMetadata / Json / ModPaths
     server/
       ServerSyncConfig.java         server.json

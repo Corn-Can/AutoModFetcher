@@ -4,29 +4,29 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.corncan.automodfetcher.client.ClientConfig;
-import com.corncan.automodfetcher.client.DownloadSession;
 import com.corncan.automodfetcher.client.ClientNetworking;
+import com.corncan.automodfetcher.client.DownloadSession;
 import com.corncan.automodfetcher.client.LauncherDetection;
 import com.corncan.automodfetcher.client.SkipDecisions;
 import com.corncan.automodfetcher.client.SyncPlan;
 import com.corncan.automodfetcher.client.TrustedServers;
-import com.corncan.automodfetcher.util.ModPaths;
 import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
+import com.corncan.automodfetcher.util.ModPaths;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.ConfirmLinkScreen;
-import net.minecraft.client.gui.screen.ConnectScreen;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.CheckboxWidget;
-import net.minecraft.client.network.ServerAddress;
-import net.minecraft.client.network.ServerInfo;
-import net.minecraft.text.Text;
-import net.minecraft.util.Util;
+import net.minecraft.Util;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Checkbox;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
+import net.minecraft.client.gui.screens.ConnectScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import net.minecraft.network.chat.Component;
 
 /**
  * Asks the player before anything is written to their mods folder.
@@ -41,10 +41,10 @@ public class ModSyncConfirmScreen extends Screen {
 	private final LineList list = new LineList();
 
 	private boolean sharedInstall;
-	private CheckboxWidget rememberChoice;
+	private Checkbox rememberChoice;
 
 	public ModSyncConfirmScreen(SyncPlan plan, ClientConfig config) {
-		super(Text.translatable("automodfetcher.confirm.title"));
+		super(Component.translatable("automodfetcher.confirm.title"));
 		this.plan = plan;
 		this.config = config;
 	}
@@ -65,9 +65,9 @@ public class ModSyncConfirmScreen extends Screen {
 		// Knowing which folder is one thing; finding it is another, and players on the vanilla
 		// launcher have no app to open it for them.
 		if (showFolderButton) {
-			this.addDrawableChild(ButtonWidget.builder(
-					Text.translatable("automodfetcher.confirm.open_folder"), button -> openModsFolder())
-					.dimensions(this.width / 2 - 100, this.height - 64, 200, 20)
+			this.addRenderableWidget(Button.builder(
+					Component.translatable("automodfetcher.confirm.open_folder"), button -> openModsFolder())
+					.bounds(this.width / 2 - 100, this.height - 64, 200, 20)
 					.build());
 		}
 
@@ -76,37 +76,37 @@ public class ModSyncConfirmScreen extends Screen {
 		// Offered rather than assumed. Agreeing once is not the same as agreeing always, and
 		// quietly turning the first into the second is not ours to do.
 		if (plan.isFullyAutomatic()) {
-			rememberChoice = this.addDrawableChild(new CheckboxWidget(this.width / 2 - 100,
+			rememberChoice = this.addRenderableWidget(new Checkbox(this.width / 2 - 100,
 					this.height - 64, 200, 20,
-					Text.translatable("automodfetcher.confirm.remember"), false));
+					Component.translatable("automodfetcher.confirm.remember"), false));
 		}
 
 		// Removals alone are still work to apply, so the action button must appear for them too.
 		if (plan.hasActionableWork()) {
-			Text acceptLabel = plan.downloads().isEmpty()
-					? Text.translatable("automodfetcher.confirm.apply")
-					: Text.translatable("automodfetcher.confirm.accept");
+			Component acceptLabel = plan.downloads().isEmpty()
+					? Component.translatable("automodfetcher.confirm.apply")
+					: Component.translatable("automodfetcher.confirm.accept");
 
-			this.addDrawableChild(ButtonWidget.builder(acceptLabel, button -> startDownload())
-					.dimensions(this.width / 2 - 154, buttonY, 150, 20)
+			this.addRenderableWidget(Button.builder(acceptLabel, button -> startDownload())
+					.bounds(this.width / 2 - 154, buttonY, 150, 20)
 					.build());
 
-			this.addDrawableChild(ButtonWidget.builder(
-					Text.translatable("automodfetcher.confirm.cancel"), button -> close())
-					.dimensions(this.width / 2 + 4, buttonY, 150, 20)
+			this.addRenderableWidget(Button.builder(
+					Component.translatable("automodfetcher.confirm.cancel"), button -> onClose())
+					.bounds(this.width / 2 + 4, buttonY, 150, 20)
 					.build());
 		} else {
 			// Nothing here is ours to install. Showing the list is still worth doing — it is
 			// how the player learns what to fetch — but it must never become a dead end, so
 			// the way onward is always offered.
-			this.addDrawableChild(ButtonWidget.builder(
-					Text.translatable("automodfetcher.confirm.connect_anyway"), button -> connectAnyway())
-					.dimensions(this.width / 2 - 154, buttonY, 150, 20)
+			this.addRenderableWidget(Button.builder(
+					Component.translatable("automodfetcher.confirm.connect_anyway"), button -> connectAnyway())
+					.bounds(this.width / 2 - 154, buttonY, 150, 20)
 					.build());
 
-			this.addDrawableChild(ButtonWidget.builder(
-					Text.translatable("automodfetcher.confirm.back"), button -> close())
-					.dimensions(this.width / 2 + 4, buttonY, 150, 20)
+			this.addRenderableWidget(Button.builder(
+					Component.translatable("automodfetcher.confirm.back"), button -> onClose())
+					.bounds(this.width / 2 + 4, buttonY, 150, 20)
 					.build());
 		}
 	}
@@ -116,60 +116,60 @@ public class ModSyncConfirmScreen extends Screen {
 
 		if (!plan.downloads().isEmpty()) {
 			lines.add(LineList.Line.of(
-					Text.translatable("automodfetcher.confirm.section.download", plan.downloads().size()),
+					Component.translatable("automodfetcher.confirm.section.download", plan.downloads().size()),
 					LineList.Line.WHITE));
 
 			for (ModEntry entry : plan.downloads()) {
-				lines.add(LineList.Line.of(Text.literal("  " + entry.fileName()), LineList.Line.GREEN));
-				lines.add(LineList.Line.of(Text.translatable("automodfetcher.confirm.file_detail",
+				lines.add(LineList.Line.of(Component.literal("  " + entry.fileName()), LineList.Line.GREEN));
+				lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.file_detail",
 						Sizes.format(entry.size()), ClientConfig.hostOf(entry.url())), LineList.Line.GREY));
 			}
 
-			lines.add(LineList.Line.of(Text.empty(), LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 		}
 
 		if (!plan.blocked().isEmpty()) {
 			lines.add(LineList.Line.of(
-					Text.translatable("automodfetcher.confirm.section.blocked", plan.blocked().size()),
+					Component.translatable("automodfetcher.confirm.section.blocked", plan.blocked().size()),
 					LineList.Line.RED));
 
 			for (SyncPlan.Blocked blocked : plan.blocked()) {
-				lines.add(LineList.Line.of(Text.literal("  " + blocked.entry().fileName()), LineList.Line.RED));
-				lines.add(LineList.Line.of(Text.translatable(blocked.reasonKey(),
+				lines.add(LineList.Line.of(Component.literal("  " + blocked.entry().fileName()), LineList.Line.RED));
+				lines.add(LineList.Line.of(Component.translatable(blocked.reasonKey(),
 						ClientConfig.hostOf(blocked.entry().url())), LineList.Line.GREY));
 			}
 
-			lines.add(LineList.Line.of(Text.translatable("automodfetcher.confirm.blocked_hint",
+			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.blocked_hint",
 					ClientConfig.FILE_NAME), LineList.Line.GREY));
-			lines.add(LineList.Line.of(Text.empty(), LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 		}
 
 		if (!plan.manual().isEmpty()) {
 			lines.add(LineList.Line.of(
-					Text.translatable("automodfetcher.confirm.section.manual", plan.manual().size()),
+					Component.translatable("automodfetcher.confirm.section.manual", plan.manual().size()),
 					LineList.Line.YELLOW));
 
 			for (ManualEntry entry : plan.manual()) {
-				lines.add(LineList.Line.of(Text.literal("  " + entry.fileName()), LineList.Line.YELLOW));
+				lines.add(LineList.Line.of(Component.literal("  " + entry.fileName()), LineList.Line.YELLOW));
 
 				// A file name alone leaves the player guessing what to search for.
 				if (entry.hasPage()) {
 					lines.add(LineList.Line.link(
-							Text.translatable("automodfetcher.confirm.open_page", entry.pageUrl()),
+							Component.translatable("automodfetcher.confirm.open_page", entry.pageUrl()),
 							entry.pageUrl()));
 				}
 			}
 
-			lines.add(LineList.Line.of(Text.empty(), LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 		}
 
 		if (!plan.deletions().isEmpty()) {
 			lines.add(LineList.Line.of(
-					Text.translatable("automodfetcher.confirm.section.remove", plan.deletions().size()),
+					Component.translatable("automodfetcher.confirm.section.remove", plan.deletions().size()),
 					LineList.Line.WHITE));
 
 			for (String fileName : plan.deletions()) {
-				lines.add(LineList.Line.of(Text.literal("  " + fileName), LineList.Line.GREY));
+				lines.add(LineList.Line.of(Component.literal("  " + fileName), LineList.Line.GREY));
 			}
 		}
 
@@ -185,78 +185,78 @@ public class ModSyncConfirmScreen extends Screen {
 		decisions.accept(ClientNetworking.serverKey(), plan.unavailableSignature());
 		ClientNetworking.rememberDiagnosis(plan);
 
-		ServerInfo server = ClientNetworking.lastServer();
+		ServerData server = ClientNetworking.lastServer();
 
-		if (this.client == null || server == null) {
+		if (this.minecraft == null || server == null) {
 			// Nothing to reconnect to from here, but the decision is saved, so joining from
 			// the server list will now go straight through.
-			close();
+			onClose();
 			return;
 		}
 
-		ConnectScreen.connect(new TitleScreen(), this.client, ServerAddress.parse(server.address), server, false);
+		ConnectScreen.startConnecting(new TitleScreen(), this.minecraft, ServerAddress.parseString(server.ip), server, false);
 	}
 
 	private void openModsFolder() {
-		Util.getOperatingSystem().open(ModPaths.modsDir().toFile());
+		Util.getPlatform().openFile(ModPaths.modsDir().toFile());
 	}
 
 	private void startDownload() {
-		if (rememberChoice != null && rememberChoice.isChecked()) {
+		if (rememberChoice != null && rememberChoice.selected()) {
 			TrustedServers.load().trust(ClientNetworking.serverKey());
 		}
 
 		DownloadSession session = new DownloadSession(plan, config);
 		session.start();
 
-		if (this.client != null) {
-			this.client.setScreen(new ModSyncProgressScreen(session, plan.downloads()));
+		if (this.minecraft != null) {
+			this.minecraft.setScreen(new ModSyncProgressScreen(session, plan.downloads()));
 		}
 	}
 
 	@Override
-	public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+	public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
 		// 1.20.1's Screen#render only draws the widgets; the backdrop is ours to draw.
 		this.renderBackground(context);
 		super.render(context, mouseX, mouseY, delta);
 
-		context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 18, 0xFFFFFFFF);
+		context.drawCenteredString(this.font, this.title, this.width / 2, 18, 0xFFFFFFFF);
 
 		if (!plan.downloads().isEmpty()) {
-			context.drawCenteredTextWithShadow(this.textRenderer,
-					Text.translatable("automodfetcher.confirm.subtitle",
+			context.drawCenteredString(this.font,
+					Component.translatable("automodfetcher.confirm.subtitle",
 							Sizes.format(plan.totalDownloadBytes())),
 					this.width / 2, 32, 0xFFA0A0A0);
 		} else {
 			// Joining without a mod the server needs ends in an immediate, unexplained drop.
 			// Saying so here is the only warning the player will get.
-			context.drawCenteredTextWithShadow(this.textRenderer,
-					Text.translatable("automodfetcher.confirm.connect_anyway_warning"),
+			context.drawCenteredString(this.font,
+					Component.translatable("automodfetcher.confirm.connect_anyway_warning"),
 					this.width / 2, 32, 0xFFFF9955);
 		}
 
 		if (sharedInstall) {
-			context.drawCenteredTextWithShadow(this.textRenderer,
-					Text.translatable("automodfetcher.confirm.shared_install"),
+			context.drawCenteredString(this.font,
+					Component.translatable("automodfetcher.confirm.shared_install"),
 					this.width / 2, 46, 0xFFFF9955);
 		}
 
-		list.render(context, this.textRenderer, mouseX, mouseY);
+		list.render(context, this.font, mouseX, mouseY);
 	}
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
 		String url = list.urlAt(mouseX, mouseY);
 
-		if (url != null && this.client != null) {
+		if (url != null && this.minecraft != null) {
 			// Route through the vanilla confirmation so opening a browser is never a surprise,
 			// and so the player sees the address before they go there.
-			this.client.setScreen(new ConfirmLinkScreen(confirmed -> {
+			this.minecraft.setScreen(new ConfirmLinkScreen(confirmed -> {
 				if (confirmed) {
-					Util.getOperatingSystem().open(url);
+					Util.getPlatform().openUri(url);
 				}
 
-				this.client.setScreen(this);
+				this.minecraft.setScreen(this);
 			}, url, false));
 
 			return true;
@@ -275,9 +275,9 @@ public class ModSyncConfirmScreen extends Screen {
 	}
 
 	@Override
-	public void close() {
-		if (this.client != null) {
-			this.client.setScreen(new TitleScreen());
+	public void onClose() {
+		if (this.minecraft != null) {
+			this.minecraft.setScreen(new TitleScreen());
 		}
 	}
 }

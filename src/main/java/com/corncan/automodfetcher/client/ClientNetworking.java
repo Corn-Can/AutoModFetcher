@@ -17,18 +17,18 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.network.ClientLoginNetworkHandler;
-import net.minecraft.client.network.ServerInfo;
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.network.FriendlyByteBuf;
 
 @Environment(EnvType.CLIENT)
 public final class ClientNetworking {
 	private static volatile ClientConfig config;
 
 	/** Remembered so the confirm screen can reconnect to the server we were just turned away from. */
-	private static volatile ServerInfo lastServer;
+	private static volatile ServerData lastServer;
 
 	/** Identifies the server even when it has no entry, so a decision is always storable. */
 	private static volatile String lastServerKey;
@@ -50,7 +50,7 @@ public final class ClientNetworking {
 	private ClientNetworking() {
 	}
 
-	public static ServerInfo lastServer() {
+	public static ServerData lastServer() {
 		return lastServer;
 	}
 
@@ -59,22 +59,22 @@ public final class ClientNetworking {
 	}
 
 	/**
-	 * The login handler knows which server it is talking to; {@code getCurrentServerEntry()}
-	 * does not yet, because the game only records that once a world is being joined. Reading
-	 * it here is why the access widener exists.
+	 * The login handler knows which server it is talking to; {@code getCurrentServer()} does
+	 * not yet, because the game only records that once a world is being joined. Reading it
+	 * here is why the access widener exists.
 	 */
-	private static void rememberServer(ClientLoginNetworkHandler handler) {
-		ServerInfo server = handler.serverInfo;
+	private static void rememberServer(ClientHandshakePacketListenerImpl handler) {
+		ServerData server = handler.serverData;
 		lastServer = server;
 
-		if (server != null && server.address != null) {
-			lastServerKey = server.address;
+		if (server != null && server.ip != null) {
+			lastServerKey = server.ip;
 			return;
 		}
 
 		// No entry to reconnect with, but the socket still names the server well enough to
 		// hang a decision on.
-		SocketAddress address = handler.connection.getAddress();
+		SocketAddress address = handler.connection.getRemoteAddress();
 		lastServerKey = address != null ? address.toString() : null;
 	}
 
@@ -86,8 +86,8 @@ public final class ClientNetworking {
 		AutoModFetcher.LOGGER.debug("Login query receiver registered on {}: {}", Channels.MANIFEST, registered);
 	}
 
-	private static CompletableFuture<PacketByteBuf> onManifest(MinecraftClient client,
-			ClientLoginNetworkHandler handler, PacketByteBuf buf,
+	private static CompletableFuture<FriendlyByteBuf> onManifest(Minecraft client,
+			ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf,
 			Consumer<GenericFutureListener<? extends Future<? super Void>>> listenerAdder) {
 		// Read the buffer here, on the netty thread: it is recycled the moment this method
 		// returns, so nothing may touch it from the async work below.
@@ -156,8 +156,8 @@ public final class ClientNetworking {
 		return new ModSyncProgressScreen(session, plan.downloads());
 	}
 
-	private static PacketByteBuf respond(boolean needsUpdate) {
-		PacketByteBuf response = PacketByteBufs.create();
+	private static FriendlyByteBuf respond(boolean needsUpdate) {
+		FriendlyByteBuf response = PacketByteBufs.create();
 		response.writeBoolean(needsUpdate);
 		return response;
 	}

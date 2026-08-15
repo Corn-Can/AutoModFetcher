@@ -11,14 +11,14 @@ import com.corncan.automodfetcher.util.ModPaths;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.font.MultilineText;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.ConfirmLinkScreen;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.Util;
+import net.minecraft.Util;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineLabel;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.chat.Component;
 
 /**
  * Shown when a player who joined without every mod is dropped shortly afterwards.
@@ -39,14 +39,14 @@ public class ModSyncDisconnectScreen extends Screen {
 	private static final int REASON_MAX_LINES = 3;
 
 	private final PendingDiagnosis diagnosis;
-	private final Text serverReason;
+	private final Component serverReason;
 	private final LineList list = new LineList();
 
-	private MultilineText reasonLines = MultilineText.EMPTY;
+	private MultiLineLabel reasonLines = MultiLineLabel.EMPTY;
 	private int causeY;
 
-	public ModSyncDisconnectScreen(PendingDiagnosis diagnosis, Text serverReason) {
-		super(Text.translatable("automodfetcher.kicked.title"));
+	public ModSyncDisconnectScreen(PendingDiagnosis diagnosis, Component serverReason) {
+		super(Component.translatable("automodfetcher.kicked.title"));
 		this.diagnosis = diagnosis;
 		this.serverReason = serverReason;
 	}
@@ -58,11 +58,11 @@ public class ModSyncDisconnectScreen extends Screen {
 
 		// Wrapped rather than drawn as one line: the reason is whatever the server sent, and
 		// a raw exception message runs straight off both edges of the window.
-		reasonLines = MultilineText.create(this.textRenderer,
-				Text.translatable("automodfetcher.kicked.server_said", serverReason),
+		reasonLines = MultiLineLabel.create(this.font,
+				Component.translatable("automodfetcher.kicked.server_said", serverReason),
 				listWidth, REASON_MAX_LINES);
 
-		causeY = REASON_TOP + reasonLines.count() * REASON_LINE_HEIGHT + 6;
+		causeY = REASON_TOP + reasonLines.getLineCount() * REASON_LINE_HEIGHT + 6;
 
 		int listTop = causeY + 16;
 		int listBottom = this.height - (diagnosis.manual().isEmpty() ? 46 : 70);
@@ -71,16 +71,16 @@ public class ModSyncDisconnectScreen extends Screen {
 		list.setLines(buildLines());
 
 		if (!diagnosis.manual().isEmpty()) {
-			this.addDrawableChild(ButtonWidget.builder(
-					Text.translatable("automodfetcher.confirm.open_folder"),
-					button -> Util.getOperatingSystem().open(ModPaths.modsDir().toFile()))
-					.dimensions(this.width / 2 - 100, this.height - 60, 200, 20)
+			this.addRenderableWidget(Button.builder(
+					Component.translatable("automodfetcher.confirm.open_folder"),
+					button -> Util.getPlatform().openFile(ModPaths.modsDir().toFile()))
+					.bounds(this.width / 2 - 100, this.height - 60, 200, 20)
 					.build());
 		}
 
-		this.addDrawableChild(ButtonWidget.builder(
-				Text.translatable("automodfetcher.confirm.back"), button -> close())
-				.dimensions(this.width / 2 - 75, this.height - 36, 150, 20)
+		this.addRenderableWidget(Button.builder(
+				Component.translatable("automodfetcher.confirm.back"), button -> onClose())
+				.bounds(this.width / 2 - 75, this.height - 36, 150, 20)
 				.build());
 	}
 
@@ -88,28 +88,28 @@ public class ModSyncDisconnectScreen extends Screen {
 		List<LineList.Line> lines = new ArrayList<>();
 
 		if (!diagnosis.manual().isEmpty()) {
-			lines.add(LineList.Line.of(Text.translatable("automodfetcher.kicked.missing"), LineList.Line.YELLOW));
+			lines.add(LineList.Line.of(Component.translatable("automodfetcher.kicked.missing"), LineList.Line.YELLOW));
 
 			for (ManualEntry entry : diagnosis.manual()) {
-				lines.add(LineList.Line.of(Text.literal("  " + entry.fileName()), LineList.Line.YELLOW));
+				lines.add(LineList.Line.of(Component.literal("  " + entry.fileName()), LineList.Line.YELLOW));
 
 				if (entry.hasPage()) {
 					lines.add(LineList.Line.link(
-							Text.translatable("automodfetcher.confirm.open_page", entry.pageUrl()),
+							Component.translatable("automodfetcher.confirm.open_page", entry.pageUrl()),
 							entry.pageUrl()));
 				}
 			}
 		}
 
 		if (!diagnosis.blocked().isEmpty()) {
-			lines.add(LineList.Line.of(Text.empty(), LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 			lines.add(LineList.Line.of(
-					Text.translatable("automodfetcher.confirm.section.blocked", diagnosis.blocked().size()),
+					Component.translatable("automodfetcher.confirm.section.blocked", diagnosis.blocked().size()),
 					LineList.Line.RED));
 
 			for (SyncPlan.Blocked blocked : diagnosis.blocked()) {
-				lines.add(LineList.Line.of(Text.literal("  " + blocked.entry().fileName()), LineList.Line.RED));
-				lines.add(LineList.Line.of(Text.translatable(blocked.reasonKey(),
+				lines.add(LineList.Line.of(Component.literal("  " + blocked.entry().fileName()), LineList.Line.RED));
+				lines.add(LineList.Line.of(Component.translatable(blocked.reasonKey(),
 						ClientConfig.hostOf(blocked.entry().url())), LineList.Line.GREY));
 			}
 		}
@@ -118,32 +118,32 @@ public class ModSyncDisconnectScreen extends Screen {
 	}
 
 	@Override
-	public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+	public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
 		this.renderBackground(context);
 		super.render(context, mouseX, mouseY, delta);
 
-		context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 18, 0xFFFFFFFF);
+		context.drawCenteredString(this.font, this.title, this.width / 2, 18, 0xFFFFFFFF);
 
 		// The server's words first: ours are a hypothesis about them, not a replacement.
-		reasonLines.drawCenterWithShadow(context, this.width / 2, REASON_TOP, REASON_LINE_HEIGHT, 0xFFA0A0A0);
+		reasonLines.renderCentered(context, this.width / 2, REASON_TOP, REASON_LINE_HEIGHT, 0xFFA0A0A0);
 
-		context.drawCenteredTextWithShadow(this.textRenderer,
-				Text.translatable("automodfetcher.kicked.likely_cause"), this.width / 2, causeY, 0xFFFFD966);
+		context.drawCenteredString(this.font,
+				Component.translatable("automodfetcher.kicked.likely_cause"), this.width / 2, causeY, 0xFFFFD966);
 
-		list.render(context, this.textRenderer, mouseX, mouseY);
+		list.render(context, this.font, mouseX, mouseY);
 	}
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
 		String url = list.urlAt(mouseX, mouseY);
 
-		if (url != null && this.client != null) {
-			this.client.setScreen(new ConfirmLinkScreen(confirmed -> {
+		if (url != null && this.minecraft != null) {
+			this.minecraft.setScreen(new ConfirmLinkScreen(confirmed -> {
 				if (confirmed) {
-					Util.getOperatingSystem().open(url);
+					Util.getPlatform().openUri(url);
 				}
 
-				this.client.setScreen(this);
+				this.minecraft.setScreen(this);
 			}, url, false));
 
 			return true;
@@ -162,9 +162,9 @@ public class ModSyncDisconnectScreen extends Screen {
 	}
 
 	@Override
-	public void close() {
-		if (this.client != null) {
-			this.client.setScreen(new TitleScreen());
+	public void onClose() {
+		if (this.minecraft != null) {
+			this.minecraft.setScreen(new TitleScreen());
 		}
 	}
 }

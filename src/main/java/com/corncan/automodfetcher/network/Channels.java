@@ -2,7 +2,7 @@ package com.corncan.automodfetcher.network;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 public final class Channels {
 	/**
@@ -13,7 +13,7 @@ public final class Channels {
 	 * <p>It also handles the "client does not have this mod" case for free: the client simply
 	 * answers that it did not understand the query, and the server lets it connect as normal.
 	 */
-	public static final Identifier MANIFEST = new Identifier(AutoModFetcher.MOD_ID, "manifest");
+	public static final ResourceLocation MANIFEST = new ResourceLocation(AutoModFetcher.MOD_ID, "manifest");
 
 	private Channels() {
 	}
