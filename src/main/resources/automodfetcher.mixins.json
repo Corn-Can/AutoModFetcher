@@ -1,0 +1,17 @@
+{
+	"required": true,
+	"minVersion": "0.8.5",
+	"package": "com.corncan.automodfetcher.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+		"ServerLoginPacketListenerImplMixin",
+		"ServerboundCustomQueryAnswerPacketMixin"
+	],
+	"client": [
+		"ClientHandshakePacketListenerImplMixin",
+		"ClientboundCustomQueryPacketMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

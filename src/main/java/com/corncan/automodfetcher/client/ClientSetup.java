@@ -1,5 +1,6 @@
 package com.corncan.automodfetcher.client;
 
+import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.client.gui.ModSyncDisconnectScreen;
 
 import net.minecraft.client.Minecraft;
@@ -51,6 +52,8 @@ public final class ClientSetup {
 		PendingDiagnosis diagnosis = ClientSession.takeDiagnosis();
 
 		if (diagnosis != null && diagnosis.isRelevantNow()) {
+			AutoModFetcher.LOGGER.info("Dropped after joining without {} mod(s); explaining why",
+					diagnosis.manual().size() + diagnosis.blocked().size());
 			ClientScreenQueue.showWithReason(reason -> new ModSyncDisconnectScreen(diagnosis, reason));
 		}
 	}

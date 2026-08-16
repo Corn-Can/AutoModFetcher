@@ -19,12 +19,6 @@ public final class Channels {
 	 */
 	public static final ResourceLocation MANIFEST = id("manifest");
 
-	/**
-	 * The client's answer. Fabric replies on the query channel itself and never uses this;
-	 * NeoForge payloads are one-directional, so the reply needs a channel of its own.
-	 */
-	public static final ResourceLocation REPLY = id("reply");
-
 	private static ResourceLocation id(String path) {
 		//? if >=1.21 {
 		/*return ResourceLocation.fromNamespaceAndPath(AutoModFetcher.MOD_ID, path);

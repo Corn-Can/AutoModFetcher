@@ -4,31 +4,35 @@ package com.corncan.automodfetcher.client;
 /*import java.util.concurrent.CompletableFuture;
 
 import com.corncan.automodfetcher.AutoModFetcher;
-import com.corncan.automodfetcher.network.ManifestPayload;
-import com.corncan.automodfetcher.network.ReplyPayload;
+import com.corncan.automodfetcher.network.LoginQuery;
+import com.corncan.automodfetcher.network.ModManifest;
 
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
+import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 
-/// NeoForge's end of the configuration exchange: read the manifest, ask [ClientSync], answer.
+/// NeoForge's end of the login query: read the manifest, ask [ClientSync], answer.
 ///
 /// Everything that decides anything is in [ClientSync]. What is left here is the part that
-/// would be different on any other loader — where the payload arrives and how a reply is sent.
+/// would be different on any other loader — where the query arrives and how a reply is sent.
 public final class ClientNetworkingNeoForge {
 	private ClientNetworkingNeoForge() {
 	}
 
-	public static void onManifest(ManifestPayload payload, IPayloadContext context) {
+	public static void onLoginQuery(int transactionId, ModManifest manifest,
+			ClientHandshakePacketListenerImpl handler) {
 		ClientSession.rememberFromConnectScreen();
 
 		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved",
-				payload.manifest().entries().size(), payload.manifest().unresolved().size());
+				manifest.entries().size(), manifest.unresolved().size());
 
-		// Off the network thread: comparing against the mods folder reads files, and the
-		// connection is held open by the server's configuration task until we answer, so
-		// there is no hurry and no reason to block netty.
+		// Off the network thread: comparing against the mods folder reads files. The server is
+		// holding the login open until we answer, so there is no hurry and no reason to block
+		// netty — but there is a 30 second login timeout, so there is no leaving it either.
 		CompletableFuture
-				.supplyAsync(() -> ClientSync.decide(payload.manifest()))
-				.thenAccept(needsUpdate -> context.reply(new ReplyPayload(needsUpdate)));
+				.supplyAsync(() -> ClientSync.decide(manifest))
+				.thenAccept(needsUpdate -> handler.connection.send(
+						new ServerboundCustomQueryAnswerPacket(transactionId,
+								new LoginQuery.Answer(needsUpdate))));
 	}
 }
 *///?}

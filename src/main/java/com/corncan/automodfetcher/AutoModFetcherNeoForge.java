@@ -4,7 +4,6 @@ package com.corncan.automodfetcher;
 /*import com.corncan.automodfetcher.client.ClientSetup;
 import com.corncan.automodfetcher.server.AutoModFetcherCommand;
 import com.corncan.automodfetcher.server.ServerNetworking;
-import com.corncan.automodfetcher.server.ServerNetworkingNeoForge;
 
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
@@ -16,8 +15,6 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.neoforged.neoforge.network.event.RegisterConfigurationTasksEvent;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 /// NeoForge's way in. The work itself is in [AutoModFetcher#init()] and [ClientSetup].
 ///
@@ -28,9 +25,6 @@ public class AutoModFetcherNeoForge {
 	public AutoModFetcherNeoForge(IEventBus modBus, Dist dist) {
 		PendingOpsApplier.run();
 		AutoModFetcher.init();
-
-		modBus.addListener(ServerNetworkingNeoForge::registerPayloads);
-		modBus.addListener(ServerNetworkingNeoForge::registerTasks);
 
 		IEventBus gameBus = NeoForge.EVENT_BUS;
 		gameBus.addListener((ServerStartedEvent event) -> ServerNetworking.onServerStarted(event.getServer()));
