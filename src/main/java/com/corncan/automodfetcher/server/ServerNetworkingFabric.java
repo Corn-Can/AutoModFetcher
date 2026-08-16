@@ -6,6 +6,7 @@ import com.corncan.automodfetcher.network.Channels;
 import com.corncan.automodfetcher.network.ModManifest;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
@@ -30,6 +31,7 @@ public final class ServerNetworkingFabric {
 	public static void register() {
 		ServerLifecycleEvents.SERVER_STARTED.register(ServerNetworking::onServerStarted);
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> ServerNetworking.onServerStopped());
+		ServerTickEvents.END_SERVER_TICK.register(ServerNetworking::onServerTick);
 
 		ServerLoginConnectionEvents.QUERY_START.register(ServerNetworkingFabric::onQueryStart);
 		ServerLoginNetworking.registerGlobalReceiver(Channels.MANIFEST, ServerNetworkingFabric::onResponse);

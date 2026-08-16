@@ -30,6 +30,12 @@ public class AutoModFetcherForge {
 				(ServerStartedEvent event) -> ServerNetworking.onServerStarted(event.getServer()));
 		MinecraftForge.EVENT_BUS.addListener(
 				(ServerStoppedEvent event) -> ServerNetworking.onServerStopped());
+		MinecraftForge.EVENT_BUS.addListener((TickEvent.ServerTickEvent event) -> {
+			if (event.phase == TickEvent.Phase.END) {
+				ServerNetworking.onServerTick(net.minecraftforge.server.ServerLifecycleHooks
+						.getCurrentServer());
+			}
+		});
 		MinecraftForge.EVENT_BUS.addListener((RegisterCommandsEvent event) ->
 				event.getDispatcher().register(AutoModFetcherCommand.tree()));
 

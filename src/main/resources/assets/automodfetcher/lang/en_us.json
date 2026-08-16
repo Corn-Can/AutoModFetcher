@@ -43,5 +43,7 @@
 	"automodfetcher.complete.retry": "Try again",
 	"automodfetcher.complete.incomplete": "Some mods are still missing — try again, or go back and pick another server.",
 	"automodfetcher.command.reloading": "Rebuilding the mod list...",
-	"automodfetcher.progress.rate": "%s/s — about %s left"
+	"automodfetcher.progress.rate": "%s/s — about %s left",
+	"automodfetcher.host.sharing": "AutoModFetcher: your %s mod(s) will be offered to anyone who joins this world.",
+	"automodfetcher.host.exclude_hint": "To keep some of them to yourself, add the file names to excludeFileNames in %s."
 }

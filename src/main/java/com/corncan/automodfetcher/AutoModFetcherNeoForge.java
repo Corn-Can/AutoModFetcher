@@ -14,6 +14,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
 /// NeoForge's way in. The work itself is in [AutoModFetcher#init()] and [ClientSetup].
@@ -29,6 +30,7 @@ public class AutoModFetcherNeoForge {
 		IEventBus gameBus = NeoForge.EVENT_BUS;
 		gameBus.addListener((ServerStartedEvent event) -> ServerNetworking.onServerStarted(event.getServer()));
 		gameBus.addListener((ServerStoppedEvent event) -> ServerNetworking.onServerStopped());
+		gameBus.addListener((ServerTickEvent.Post event) -> ServerNetworking.onServerTick(event.getServer()));
 		gameBus.addListener((RegisterCommandsEvent event) ->
 				event.getDispatcher().register(AutoModFetcherCommand.tree()));
 

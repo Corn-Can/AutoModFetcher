@@ -1,18 +1,25 @@
 package com.corncan.automodfetcher.server;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.network.ModManifest;
 
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 
 /**
- * The server's mod list: built once at startup, handed to every client that asks.
+ * The server's mod list: built once, handed to every client that asks.
  *
- * <p>Sending it is the loader's business — Fabric has a login query, NeoForge has
- * configuration payloads — so only the list itself lives here.
+ * <p>Sending it is the loader's business — each has its own way in — so only the list itself
+ * lives here.
  */
 public final class ServerNetworking {
 	private static volatile ModManifest manifest;
+
+	/** Stops the tick below starting a second build while the first is still running. */
+	private static final AtomicBoolean building = new AtomicBoolean();
 
 	private ServerNetworking() {
 	}
@@ -23,20 +30,65 @@ public final class ServerNetworking {
 	}
 
 	public static void onServerStarted(MinecraftServer server) {
-		// Only dedicated servers hand mods out. On an integrated server the "client" is
-		// already running from the very same mods folder, so there is nothing to sync.
-		if (!server.isDedicatedServer()) {
-			return;
+		// A single-player world nobody else can reach has nothing to hand out, and resolving
+		// a mods folder against two platforms on every world load would be work for no one.
+		// An integrated server waits until it is actually opened to other players.
+		if (server.isDedicatedServer()) {
+			startBuild(server);
 		}
+	}
 
-		// Built off-thread so platform lookups never hold up server startup.
-		Thread builder = new Thread(ServerNetworking::rebuild, "AutoModFetcher-manifest-builder");
-		builder.setDaemon(true);
-		builder.start();
+	/**
+	 * Catches the moment a single-player world is opened to the network.
+	 *
+	 * <p>Neither loader has an event for it, but the flag is a field read, so watching it is
+	 * cheaper than the machinery to avoid watching it.
+	 */
+	public static void onServerTick(MinecraftServer server) {
+		if (manifest == null && !building.get() && server.isPublished()) {
+			startBuild(server);
+		}
 	}
 
 	public static void onServerStopped() {
 		manifest = null;
+		building.set(false);
+	}
+
+	private static void startBuild(MinecraftServer server) {
+		if (!building.compareAndSet(false, true)) {
+			return;
+		}
+
+		// Built off-thread so platform lookups never hold up the game.
+		Thread builder = new Thread(() -> {
+			try {
+				ModManifest built = rebuild();
+
+				if (built != null && !server.isDedicatedServer()) {
+					server.execute(() -> announceToHost(server, built));
+				}
+			} finally {
+				building.set(false);
+			}
+		}, "AutoModFetcher-manifest-builder");
+
+		builder.setDaemon(true);
+		builder.start();
+	}
+
+	/**
+	 * Says out loud what is about to be shared, because on a hosted world the mods folder is
+	 * someone's own — shaders, minimaps and all — rather than a list assembled for a server.
+	 * Nobody should find out what their friends were sent by watching them download it.
+	 */
+	private static void announceToHost(MinecraftServer server, ModManifest built) {
+		server.getPlayerList().broadcastSystemMessage(
+				Component.translatable("automodfetcher.host.sharing", built.entries().size())
+						.withStyle(ChatFormatting.YELLOW), false);
+		server.getPlayerList().broadcastSystemMessage(
+				Component.translatable("automodfetcher.host.exclude_hint", ServerSyncConfig.FILE_NAME)
+						.withStyle(ChatFormatting.GRAY), false);
 	}
 
 	/**

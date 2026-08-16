@@ -43,5 +43,7 @@
 	"automodfetcher.complete.retry": "重試",
 	"automodfetcher.complete.incomplete": "還有模組沒裝好——可以重試，或回主選單換一台伺服器。",
 	"automodfetcher.command.reloading": "正在重建模組清單……",
-	"automodfetcher.progress.rate": "%s/s — 約剩 %s"
+	"automodfetcher.progress.rate": "%s/s — 約剩 %s",
+	"automodfetcher.host.sharing": "AutoModFetcher：你的 %s 個模組會提供給加入這個世界的人。",
+	"automodfetcher.host.exclude_hint": "不想分享某些模組的話，把檔名加進 %s 的 excludeFileNames。"
 }
