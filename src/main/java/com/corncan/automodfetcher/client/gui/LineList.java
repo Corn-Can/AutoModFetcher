@@ -3,8 +3,6 @@ package com.corncan.automodfetcher.client.gui;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -15,7 +13,6 @@ import net.minecraft.network.chat.Component;
  * <p>Vanilla's entry list widgets are built around selectable rows; all these screens need
  * is clipped, scrollable text, which is far less machinery.
  */
-@Environment(EnvType.CLIENT)
 public class LineList {
 	private static final int LINE_HEIGHT = 12;
 

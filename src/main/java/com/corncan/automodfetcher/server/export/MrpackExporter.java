@@ -17,6 +17,7 @@ import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.network.ModSide;
+import com.corncan.automodfetcher.platform.Loader;
 import com.corncan.automodfetcher.server.ServerSyncConfig;
 import com.corncan.automodfetcher.server.resolver.ModrinthResolver;
 import com.corncan.automodfetcher.server.resolver.Resolution;
@@ -26,7 +27,6 @@ import com.corncan.automodfetcher.util.ModPaths;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * Writes the server's mod list as a Modrinth modpack.
@@ -123,7 +123,7 @@ public final class MrpackExporter {
 	 * {@code selfDownloadUrl} is only for the window before that is true.
 	 */
 	private static int addSelf(JsonArray files, ServerSyncConfig config) {
-		Path own = ownJar();
+		Path own = Loader.INSTANCE.ownJar();
 
 		if (own == null) {
 			AutoModFetcher.LOGGER.warn("Could not locate this mod's own jar; leaving it out of the pack");
@@ -164,13 +164,6 @@ public final class MrpackExporter {
 		return 0;
 	}
 
-	private static Path ownJar() {
-		return FabricLoader.getInstance()
-				.getModContainer(AutoModFetcher.MOD_ID)
-				.flatMap(container -> container.getOrigin().getPaths().stream().findFirst())
-				.orElse(null);
-	}
-
 	private static JsonObject buildIndex(JsonArray files, ServerSyncConfig config) {
 		JsonObject index = new JsonObject();
 		index.addProperty("formatVersion", 1);
@@ -181,17 +174,10 @@ public final class MrpackExporter {
 
 		JsonObject dependencies = new JsonObject();
 		dependencies.addProperty("minecraft", AutoModFetcher.minecraftVersion());
-		dependencies.addProperty("fabric-loader", loaderVersion());
+		dependencies.addProperty(Loader.INSTANCE.mrpackDependencyKey(), Loader.INSTANCE.loaderVersion());
 		index.add("dependencies", dependencies);
 
 		return index;
-	}
-
-	private static String loaderVersion() {
-		return FabricLoader.getInstance()
-				.getModContainer("fabricloader")
-				.map(container -> container.getMetadata().getVersion().getFriendlyString())
-				.orElse("0.16.14");
 	}
 
 	private static Path writeZip(JsonObject index) throws IOException {

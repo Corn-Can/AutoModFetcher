@@ -9,8 +9,6 @@ import com.corncan.automodfetcher.client.SyncPlan;
 import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -30,7 +28,6 @@ import net.minecraft.network.chat.Component;
  * <p>It only offers an explanation, never a certainty: the drop could have been a kick, a
  * ban or a dead connection. The server's own words are shown above ours for that reason.
  */
-@Environment(EnvType.CLIENT)
 public class ModSyncDisconnectScreen extends Screen {
 	private static final int REASON_TOP = 34;
 	private static final int REASON_LINE_HEIGHT = 10;

@@ -6,14 +6,11 @@ import java.util.List;
 import com.corncan.automodfetcher.client.DownloadSession;
 import com.corncan.automodfetcher.network.ModEntry;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-@Environment(EnvType.CLIENT)
 public class ModSyncProgressScreen extends Screen {
 	private final DownloadSession session;
 	private final List<ModEntry> entries;

@@ -7,8 +7,12 @@ import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.server.export.CurseForgePackExporter;
 import com.corncan.automodfetcher.server.export.MrpackExporter;
 import com.corncan.automodfetcher.util.ModPaths;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
+//? if fabric {
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+//?}
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -20,17 +24,24 @@ public final class AutoModFetcherCommand {
 	}
 
 	public static void register() {
+		//? if fabric {
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
-				dispatcher.register(Commands.literal("automodfetcher")
-						.requires(source -> source.hasPermission(2))
-						.then(Commands.literal("reload")
-								.executes(context -> reload(context.getSource())))
-						.then(Commands.literal("export")
-								.executes(context -> exportAll(context.getSource()))
-								.then(Commands.literal("modrinth")
-										.executes(context -> exportMrpack(context.getSource())))
-								.then(Commands.literal("curseforge")
-										.executes(context -> exportCursePack(context.getSource()))))));
+				dispatcher.register(tree()));
+		//?}
+	}
+
+	/** The command itself, so each loader only has to hand it to its own dispatcher. */
+	public static LiteralArgumentBuilder<CommandSourceStack> tree() {
+		return Commands.literal("automodfetcher")
+				.requires(source -> source.hasPermission(2))
+				.then(Commands.literal("reload")
+						.executes(context -> reload(context.getSource())))
+				.then(Commands.literal("export")
+						.executes(context -> exportAll(context.getSource()))
+						.then(Commands.literal("modrinth")
+								.executes(context -> exportMrpack(context.getSource())))
+						.then(Commands.literal("curseforge")
+								.executes(context -> exportCursePack(context.getSource()))));
 	}
 
 	/**

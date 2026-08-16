@@ -2,10 +2,6 @@ package com.corncan.automodfetcher.client.gui;
 
 import java.util.Locale;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
-@Environment(EnvType.CLIENT)
 public final class Sizes {
 	private Sizes() {
 	}

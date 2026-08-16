@@ -5,9 +5,6 @@ import java.util.List;
 import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * What needs to happen before this player can join.
  *
@@ -16,7 +13,6 @@ import net.fabricmc.api.Environment;
  * @param deletions file names we installed earlier that the server no longer requires
  * @param manual    files the server could not provide a URL for at all
  */
-@Environment(EnvType.CLIENT)
 public record SyncPlan(List<ModEntry> downloads, List<Blocked> blocked, List<String> deletions,
 		List<ManualEntry> manual) {
 

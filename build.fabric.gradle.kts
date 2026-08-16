@@ -81,6 +81,10 @@ tasks {
 		}
 
 		filesMatching("fabric.mod.json") { expand(props) }
+
+		// NeoForge's metadata has no meaning here, and shipping it is worse than untidy: a
+		// jar carrying neoforge.mods.toml looks like a NeoForge mod to anything that reads it.
+		exclude("META-INF/neoforge.mods.toml", "META-INF/accesstransformer.cfg")
 	}
 
 	jar {

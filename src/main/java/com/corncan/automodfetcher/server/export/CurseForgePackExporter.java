@@ -15,6 +15,7 @@ import java.util.zip.ZipOutputStream;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.network.ModSide;
+import com.corncan.automodfetcher.platform.Loader;
 import com.corncan.automodfetcher.server.ServerModScanner;
 import com.corncan.automodfetcher.server.ServerModScanner.ScannedMod;
 import com.corncan.automodfetcher.server.ServerSyncConfig;
@@ -24,8 +25,6 @@ import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-
-import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * Writes the server's mod list as a CurseForge modpack.
@@ -134,7 +133,7 @@ public final class CurseForgePackExporter {
 		minecraft.addProperty("version", AutoModFetcher.minecraftVersion());
 
 		JsonObject loader = new JsonObject();
-		loader.addProperty("id", "fabric-" + loaderVersion());
+		loader.addProperty("id", Loader.INSTANCE.packLoaderId() + "-" + Loader.INSTANCE.loaderVersion());
 		loader.addProperty("primary", true);
 
 		JsonArray loaders = new JsonArray();
@@ -151,13 +150,6 @@ public final class CurseForgePackExporter {
 		manifest.addProperty("overrides", "overrides");
 
 		return manifest;
-	}
-
-	private static String loaderVersion() {
-		return FabricLoader.getInstance()
-				.getModContainer("fabricloader")
-				.map(container -> container.getMetadata().getVersion().getFriendlyString())
-				.orElse("0.16.14");
 	}
 
 	private static Path writeZip(JsonObject manifest) throws IOException {

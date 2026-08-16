@@ -28,3 +28,9 @@ mod.mc_releases = ["1.21.1"]
 mod.mc_compat = "1.21.1"
 mod.java = ">=21"
 deps.fabric_api = "0.116.15+1.21.1"
+
+[neoforge."1.21.1"]
+# NeoForge spells compatibility as a Maven range.
+mod.mc_compat = "[1.21.1]"
+mod.java = ">=21"
+deps.neo_loader = "21.1.248"

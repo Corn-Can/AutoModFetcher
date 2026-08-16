@@ -10,10 +10,6 @@ import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
-@Environment(EnvType.CLIENT)
 public final class SyncPlanner {
 	private SyncPlanner() {
 	}

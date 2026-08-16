@@ -4,8 +4,6 @@ import com.corncan.automodfetcher.client.DownloadSession;
 import com.corncan.automodfetcher.client.GameRestarter;
 import com.corncan.automodfetcher.client.SyncPlan;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -20,7 +18,6 @@ import net.minecraft.network.chat.Component;
  * menu" with "restart now", which reads fine after a clean install and traps the player after
  * a cancelled or failed one: restarting achieves nothing, and there was nowhere else to go.
  */
-@Environment(EnvType.CLIENT)
 public class ModSyncCompleteScreen extends Screen {
 	private final DownloadSession session;
 

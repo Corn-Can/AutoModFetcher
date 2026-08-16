@@ -7,9 +7,6 @@ import java.util.Map;
 import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * Remembers that a player chose to join a server despite mods we cannot install for them.
  *
@@ -20,7 +17,6 @@ import net.fabricmc.api.Environment;
  * <p>It is keyed by what was actually missing, not just the address. If the server's list of
  * unavailable mods changes, that is new information and worth asking about again.
  */
-@Environment(EnvType.CLIENT)
 public class SkipDecisions {
 	public static final String FILE_NAME = "skipped-servers.json";
 

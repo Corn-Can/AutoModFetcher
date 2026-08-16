@@ -1,8 +1,5 @@
 package com.corncan.automodfetcher.client;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * A smoothed download rate, safe to ask for as often as a screen redraws.
  *
@@ -11,7 +8,6 @@ import net.fabricmc.api.Environment;
  * taken from the start of the session keeps reporting a healthy speed long after a transfer
  * has stalled, so recent samples are weighted far more heavily than old ones.
  */
-@Environment(EnvType.CLIENT)
 public class RateMeter {
 	private static final long SAMPLE_INTERVAL_MILLIS = 400;
 	private static final double SMOOTHING = 0.4;

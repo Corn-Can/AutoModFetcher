@@ -8,21 +8,24 @@ import java.util.List;
 
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
-
 /**
  * Removes mods the server no longer requires, on the launch after they were marked.
  *
  * <p>They cannot be deleted at the time we decide to remove them: the jar is loaded, and on
- * Windows an open handle makes the file undeletable. Pre-launch is the earliest point where
- * most mod jars have not been opened yet.
+ * Windows an open handle makes the file undeletable. The best any loader can offer is a hook
+ * early enough that most mod jars have not been opened yet.
  *
  * <p>Deletion is best effort. A file that is still locked stays on the list and is retried
  * next launch rather than failing the startup.
+ *
+ * <p>Each loader calls {@link #run()} at the earliest moment it offers. How early that is
+ * decides how often a deletion succeeds first time rather than next launch.
  */
-public class PendingOpsApplier implements PreLaunchEntrypoint {
-	@Override
-	public void onPreLaunch() {
+public final class PendingOpsApplier {
+	private PendingOpsApplier() {
+	}
+
+	public static void run() {
 		try {
 			apply();
 		} catch (Exception e) {
@@ -31,7 +34,7 @@ public class PendingOpsApplier implements PreLaunchEntrypoint {
 		}
 	}
 
-	private void apply() {
+	private static void apply() {
 		if (!Files.isRegularFile(PendingOps.path())) {
 			return;
 		}

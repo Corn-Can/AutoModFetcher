@@ -18,9 +18,6 @@ import com.corncan.automodfetcher.util.Hashing;
 import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * A hash index of the local mods folder, built in the background at launch.
  *
@@ -28,7 +25,6 @@ import net.fabricmc.api.Environment;
  * second or two, and doing that while the configuration phase is open would let registry
  * sync disconnect us before we ever got to compare anything.
  */
-@Environment(EnvType.CLIENT)
 public final class ClientModIndex {
 	private static final String CACHE_FILE_NAME = "local-index.json";
 

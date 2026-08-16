@@ -9,16 +9,12 @@ import java.util.Map;
 import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * What this mod has installed on the player's behalf.
  *
  * <p>Cleanup is scoped strictly to this list. Anything the player installed themselves —
  * Sodium, Iris, a shader pack loader — is never a deletion candidate, whatever the server says.
  */
-@Environment(EnvType.CLIENT)
 public class InstalledState {
 	public static final String FILE_NAME = "installed.json";
 

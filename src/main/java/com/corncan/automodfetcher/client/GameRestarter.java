@@ -9,10 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.corncan.automodfetcher.AutoModFetcher;
-
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.fabricmc.loader.api.FabricLoader;
+import com.corncan.automodfetcher.platform.Loader;
 
 /**
  * Relaunches the game so freshly downloaded mods take effect without a trip to the launcher.
@@ -21,15 +18,15 @@ import net.fabricmc.loader.api.FabricLoader;
  * binary, its JVM arguments, its class path, and the game arguments Fabric kept hold of.
  *
  * <p>Two details make this workable rather than fragile guesswork. Game arguments come from
- * {@link FabricLoader#getLaunchArguments(boolean)} as a real array, so paths containing spaces
- * survive — splitting {@code sun.java.command} on whitespace would mangle them. And the whole
- * thing is handed to {@link ProcessBuilder} as a list, which never re-parses quoting.
+ * {@link Loader#launchArguments()} as a real array, so paths containing spaces survive —
+ * splitting {@code sun.java.command} on whitespace would mangle them. And the whole thing is
+ * handed to {@link ProcessBuilder} as a list, which never re-parses quoting.
  *
- * <p>It is still best effort. A launcher that kills its child processes on exit, or one that
- * wraps the game in a supervisor, can defeat it — which is why this is offered as a button
- * next to "quit" rather than done automatically.
+ * <p>It is still best effort, and not every loader keeps the arguments at all. A launcher
+ * that kills its child processes on exit, or one that wraps the game in a supervisor, can
+ * defeat it too — which is why this is offered as a button next to "quit" rather than done
+ * automatically, and why {@link #isSupported()} is checked before offering it.
  */
-@Environment(EnvType.CLIENT)
 public final class GameRestarter {
 	private GameRestarter() {
 	}
@@ -37,6 +34,7 @@ public final class GameRestarter {
 	/** Whether we have enough to rebuild the command; checked before offering the button. */
 	public static boolean isSupported() {
 		return javaBinary() != null && mainClass() != null
+				&& Loader.INSTANCE.launchArguments() != null
 				&& !System.getProperty("java.class.path", "").isBlank();
 	}
 
@@ -48,8 +46,9 @@ public final class GameRestarter {
 		try {
 			Path java = javaBinary();
 			String mainClass = mainClass();
+			String[] gameArgs = Loader.INSTANCE.launchArguments();
 
-			if (java == null || mainClass == null) {
+			if (java == null || mainClass == null || gameArgs == null) {
 				AutoModFetcher.LOGGER.warn("Cannot rebuild the launch command; not restarting");
 				return false;
 			}
@@ -60,10 +59,10 @@ public final class GameRestarter {
 			command.add("-cp");
 			command.add(System.getProperty("java.class.path"));
 			command.add(mainClass);
-			command.addAll(List.of(FabricLoader.getInstance().getLaunchArguments(false)));
+			command.addAll(List.of(gameArgs));
 
 			ProcessBuilder builder = new ProcessBuilder(command)
-					.directory(FabricLoader.getInstance().getGameDir().toFile())
+					.directory(Loader.INSTANCE.gameDir().toFile())
 					.redirectOutput(ProcessBuilder.Redirect.DISCARD)
 					.redirectError(ProcessBuilder.Redirect.DISCARD)
 					.redirectInput(ProcessBuilder.Redirect.INHERIT);

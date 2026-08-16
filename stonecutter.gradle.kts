@@ -16,6 +16,11 @@ stonecutter parameters {
 	constants {
 		match(loader, "fabric", "forge", "neoforge")
 	}
+
+	// Both are facts about the build, not about the running game, and asking the loader for
+	// them meant a different call on every platform for an answer that was already known here.
+	swaps["mod_version"] = "\"${properties.get<String>("mod.version")}\";"
+	swaps["minecraft_version"] = "\"${node.metadata.version}\";"
 }
 
 // Builds every node, not just the active one. Stonecutter switches the source tree between

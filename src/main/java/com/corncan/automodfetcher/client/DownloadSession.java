@@ -32,16 +32,12 @@ import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.util.Hashing;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * Downloads a plan's files on background threads and reports progress the GUI can poll.
  *
  * <p>A file only reaches {@code mods/} after its SHA-512 matches what the server said, so a
  * truncated or tampered download can never become an installed mod.
  */
-@Environment(EnvType.CLIENT)
 public class DownloadSession {
 	private static final int MAX_REDIRECTS = 5;
 	private static final int BUFFER_SIZE = 64 * 1024;

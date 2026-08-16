@@ -2,8 +2,6 @@ package com.corncan.automodfetcher.client;
 
 import java.util.function.Function;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -20,7 +18,6 @@ import net.minecraft.network.chat.Component;
  * screen instead would replace it before the server had even answered, and the incoming
  * disconnect would then flash its own screen over ours.
  */
-@Environment(EnvType.CLIENT)
 public final class ClientScreenQueue {
 	/** Long enough to cover a slow disconnect round trip, short enough not to linger. */
 	private static final int GUARD_TICKS = 200;

@@ -13,13 +13,13 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.corncan.automodfetcher.AutoModFetcher"
+			"com.corncan.automodfetcher.AutoModFetcherFabric"
 		],
 		"client": [
-			"com.corncan.automodfetcher.AutoModFetcherClient"
+			"com.corncan.automodfetcher.AutoModFetcherClientFabric"
 		],
 		"preLaunch": [
-			"com.corncan.automodfetcher.PendingOpsApplier"
+			"com.corncan.automodfetcher.PendingOpsApplierFabric"
 		]
 	},
 	"accessWidener": "automodfetcher.accesswidener",

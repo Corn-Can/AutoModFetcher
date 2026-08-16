@@ -4,9 +4,6 @@ import java.util.List;
 
 import com.corncan.automodfetcher.network.ManualEntry;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * What we knew was missing when a player chose to join anyway.
  *
@@ -15,7 +12,6 @@ import net.fabricmc.api.Environment;
  * exception from some other mod's packet handler, and the player is left with
  * "Disconnected". We already had the answer before they connected.
  */
-@Environment(EnvType.CLIENT)
 public record PendingDiagnosis(List<ManualEntry> manual, List<SyncPlan.Blocked> blocked, long joinedAt) {
 	/**
 	 * A mod-mismatch drop happens within moments of joining; someone quitting after an hour

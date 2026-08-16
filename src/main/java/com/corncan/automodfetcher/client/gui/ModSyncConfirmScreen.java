@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.corncan.automodfetcher.client.ClientConfig;
-import com.corncan.automodfetcher.client.ClientNetworking;
+import com.corncan.automodfetcher.client.ClientSession;
 import com.corncan.automodfetcher.client.DownloadSession;
 import com.corncan.automodfetcher.client.LauncherDetection;
 import com.corncan.automodfetcher.client.SkipDecisions;
@@ -14,8 +14,6 @@ import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -34,7 +32,6 @@ import net.minecraft.network.chat.Component;
  * <p>The source host is shown for every file on purpose: agreeing here means letting a server
  * put code on this machine, and the player should be able to see where it comes from.
  */
-@Environment(EnvType.CLIENT)
 public class ModSyncConfirmScreen extends Screen {
 	private final SyncPlan plan;
 	private final ClientConfig config;
@@ -191,10 +188,10 @@ public class ModSyncConfirmScreen extends Screen {
 	 */
 	private void connectAnyway() {
 		SkipDecisions decisions = SkipDecisions.load();
-		decisions.accept(ClientNetworking.serverKey(), plan.unavailableSignature());
-		ClientNetworking.rememberDiagnosis(plan);
+		decisions.accept(ClientSession.serverKey(), plan.unavailableSignature());
+		ClientSession.rememberDiagnosis(plan);
 
-		ServerData server = ClientNetworking.lastServer();
+		ServerData server = ClientSession.lastServer();
 
 		if (this.minecraft == null || server == null) {
 			// Nothing to reconnect to from here, but the decision is saved, so joining from
@@ -218,7 +215,7 @@ public class ModSyncConfirmScreen extends Screen {
 
 	private void startDownload() {
 		if (rememberChoice != null && rememberChoice.selected()) {
-			TrustedServers.load().trust(ClientNetworking.serverKey());
+			TrustedServers.load().trust(ClientSession.serverKey());
 		}
 
 		DownloadSession session = new DownloadSession(plan, config);

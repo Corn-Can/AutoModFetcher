@@ -7,9 +7,6 @@ import java.util.List;
 import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /**
  * Servers the player has allowed to install mods without being asked again.
  *
@@ -21,7 +18,6 @@ import net.fabricmc.api.Environment;
  * accepted joining <em>without</em> mods nobody can supply. Merging them would let one answer
  * stand in for the other.
  */
-@Environment(EnvType.CLIENT)
 public class TrustedServers {
 	public static final String FILE_NAME = "trusted-servers.json";
 

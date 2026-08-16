@@ -5,11 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 
+import com.corncan.automodfetcher.platform.Loader;
 import com.corncan.automodfetcher.util.ModPaths;
-
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * A best guess at which launcher started the game.
@@ -24,7 +21,6 @@ import net.fabricmc.loader.api.FabricLoader;
  * every launcher understands, whereas guessing a specific launcher would send players
  * instructions for software they do not have.
  */
-@Environment(EnvType.CLIENT)
 public enum LauncherDetection {
 	VANILLA("Minecraft Launcher"),
 	CURSEFORGE("CurseForge App"),
@@ -116,7 +112,7 @@ public enum LauncherDetection {
 			return false;
 		}
 
-		Path gameDir = FabricLoader.getInstance().getGameDir().toAbsolutePath().normalize();
+		Path gameDir = Loader.INSTANCE.gameDir().toAbsolutePath().normalize();
 
 		try {
 			return Files.isSameFile(defaultDir, gameDir);
@@ -151,6 +147,6 @@ public enum LauncherDetection {
 				detected.displayName(),
 				System.getProperty("minecraft.launcher.brand", "unset"),
 				sharesTheDefaultInstall(),
-				FabricLoader.getInstance().getGameDir().toAbsolutePath());
+				Loader.INSTANCE.gameDir().toAbsolutePath());
 	}
 }

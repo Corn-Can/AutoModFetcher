@@ -9,11 +9,7 @@ import java.util.Locale;
 import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-
 /** {@code config/automodfetcher/client.json} */
-@Environment(EnvType.CLIENT)
 public class ClientConfig {
 	public static final String FILE_NAME = "client.json";
 
