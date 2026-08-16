@@ -129,6 +129,19 @@ public class DownloadSession {
 		}
 	}
 
+	/**
+	 * The file is already there and the running game is holding it open.
+	 *
+	 * <p>Windows will not let anyone replace an open jar, and nothing about that changes while
+	 * the game is up — so retrying is three ways of writing down the same failure. The
+	 * download itself succeeded; only the last step could not happen yet.
+	 */
+	private static final class FileInUseException extends IOException {
+		FileInUseException(String fileName) {
+			super("already installed and in use; it will be replaced on the next launch: " + fileName);
+		}
+	}
+
 	private void runOne(ModEntry entry) {
 		int attempts = 1 + Math.max(0, config.downloadRetries);
 
@@ -145,6 +158,11 @@ public class DownloadSession {
 				return;
 			} catch (BlockedHostException e) {
 				deleteQuietly(partFileFor(entry));
+				fail(entry, e);
+				return;
+			} catch (FileInUseException e) {
+				// The part file stays: the bytes are good, and the next launch can finish
+				// the job without fetching them again.
 				fail(entry, e);
 				return;
 			} catch (Exception e) {
@@ -179,7 +197,17 @@ public class DownloadSession {
 			throw new IOException("Checksum mismatch");
 		}
 
-		Files.move(temp, ModPaths.modsDir().resolve(entry.fileName()), StandardCopyOption.REPLACE_EXISTING);
+		Path target = ModPaths.modsDir().resolve(entry.fileName());
+
+		try {
+			Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+		} catch (IOException e) {
+			if (Files.exists(target)) {
+				throw new FileInUseException(entry.fileName());
+			}
+
+			throw e;
+		}
 
 		synchronized (completed) {
 			completed.put(entry.fileName(), sha512.toLowerCase(Locale.ROOT));

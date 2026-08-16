@@ -14,7 +14,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
 import com.corncan.automodfetcher.AutoModFetcher;
+import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.util.Hashing;
+import com.corncan.automodfetcher.util.JarMetadata;
 import com.corncan.automodfetcher.util.Json;
 import com.corncan.automodfetcher.util.ModPaths;
 
@@ -33,7 +35,8 @@ public final class ClientModIndex {
 	private ClientModIndex() {
 	}
 
-	public record Index(Set<String> sha512Hashes, Set<String> fileNames) {
+	/** @param versionKeys "modid@version" for every jar present, however it was packaged */
+	public record Index(Set<String> sha512Hashes, Set<String> fileNames, Set<String> versionKeys) {
 	}
 
 	/** Cached per file so an unchanged mods folder costs no hashing at all on later launches. */
@@ -45,6 +48,8 @@ public final class ClientModIndex {
 		public long size;
 		public long lastModified;
 		public String sha512;
+		public String modId;
+		public String version;
 	}
 
 	public static void beginScan() {
@@ -76,9 +81,10 @@ public final class ClientModIndex {
 
 		Set<String> hashes = new HashSet<>();
 		Set<String> fileNames = new HashSet<>();
+		Set<String> versionKeys = new HashSet<>();
 
 		if (!Files.isDirectory(modsDir)) {
-			return new Index(hashes, fileNames);
+			return new Index(hashes, fileNames, versionKeys);
 		}
 
 		try (Stream<Path> stream = Files.list(modsDir)) {
@@ -95,23 +101,33 @@ public final class ClientModIndex {
 					long lastModified = Files.getLastModifiedTime(jar).toMillis();
 
 					CachedFile cached = cache.byFileName.get(fileName);
-					String sha512;
-
-					if (cached != null && cached.sha512 != null && cached.size == size
-							&& cached.lastModified == lastModified) {
-						sha512 = cached.sha512;
-					} else {
-						sha512 = Hashing.sha512(jar);
-					}
-
 					CachedFile entry = new CachedFile();
 					entry.size = size;
 					entry.lastModified = lastModified;
-					entry.sha512 = sha512;
+
+					if (cached != null && cached.sha512 != null && cached.size == size
+							&& cached.lastModified == lastModified) {
+						entry.sha512 = cached.sha512;
+						entry.modId = cached.modId;
+						entry.version = cached.version;
+					} else {
+						entry.sha512 = Hashing.sha512(jar);
+
+						JarMetadata metadata = JarMetadata.read(jar);
+						entry.modId = metadata.modId();
+						entry.version = metadata.version();
+					}
+
 					updated.byFileName.put(fileName, entry);
 
-					hashes.add(sha512.toLowerCase(Locale.ROOT));
+					hashes.add(entry.sha512.toLowerCase(Locale.ROOT));
 					fileNames.add(fileName.toLowerCase(Locale.ROOT));
+
+					String versionKey = ModEntry.versionKey(entry.modId, entry.version);
+
+					if (versionKey != null) {
+						versionKeys.add(versionKey);
+					}
 				} catch (IOException e) {
 					AutoModFetcher.LOGGER.warn("Could not hash local mod {}", fileName, e);
 				}
@@ -123,7 +139,7 @@ public final class ClientModIndex {
 		Json.writeQuietly(cachePath, updated);
 		AutoModFetcher.LOGGER.info("Indexed {} local mod file(s)", updated.byFileName.size());
 
-		return new Index(hashes, fileNames);
+		return new Index(hashes, fileNames, versionKeys);
 	}
 
 	/** Folds freshly downloaded files into the cache so the next launch does not rehash them. */

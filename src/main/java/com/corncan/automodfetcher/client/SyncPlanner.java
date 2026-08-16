@@ -33,6 +33,14 @@ public final class SyncPlanner {
 				continue;
 			}
 
+			// The server could not find its own file on a platform, so what is on offer is a
+			// different packaging of the same version. Someone who already has that version
+			// gains nothing by swapping one for the other — and on Windows cannot anyway,
+			// because the jar they are being asked to replace is the one they are running.
+			if (entry.equivalentBuild() && index.versionKeys().contains(entry.versionKey())) {
+				continue;
+			}
+
 			if (!isSafeFileName(entry.fileName())) {
 				blocked.add(new SyncPlan.Blocked(entry, SyncPlan.Blocked.REASON_FILE_NAME));
 				continue;

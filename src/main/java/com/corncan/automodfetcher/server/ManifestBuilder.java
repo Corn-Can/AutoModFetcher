@@ -171,10 +171,11 @@ public final class ManifestBuilder {
 				// a modpack export then published as fact.
 				rebuilds++;
 				entries.add(new ModEntry(mod.fileName(), resolution.sha1(), resolution.sha512(),
-						resolution.size(), resolution.url(), mod.side()));
+						resolution.size(), resolution.url(), mod.side(),
+						mod.modId(), mod.modVersion(), true));
 			} else {
 				entries.add(new ModEntry(mod.fileName(), mod.sha1(), mod.sha512(), mod.size(), resolution.url(),
-						mod.side()));
+						mod.side(), mod.modId(), mod.modVersion(), false));
 			}
 		}
 
