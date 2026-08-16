@@ -3,6 +3,8 @@ package com.corncan.automodfetcher.client;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.multiplayer.ServerData;
 
 /**
@@ -49,6 +51,27 @@ public final class ClientSession {
 		diagnosis = plan == null ? null : PendingDiagnosis.of(plan);
 	}
 
+	//? if >=1.20.2 {
+	/*/// Works out which server we are talking to from the connect screen.
+	///
+	/// 1.20.2 stripped the server out of the login handler, and `Minecraft.getCurrentServer()`
+	/// reads through the play-phase connection, which does not exist yet. The connect screen's
+	/// socket is the only thing left that names the server, and reaching it is why the access
+	/// widener and access transformer exist.
+	///
+	/// There is no [ServerData] to be had here at all; one built from the address is exactly
+	/// what "direct connect" would have produced.
+	public static void rememberFromConnectScreen() {
+		SocketAddress address = Minecraft.getInstance().screen instanceof ConnectScreen connecting
+				&& connecting.connection != null
+						? connecting.connection.getRemoteAddress()
+						: null;
+
+		String key = describe(address);
+		rememberServer(key == null ? null : new ServerData(key, key, ServerData.Type.OTHER), key);
+	}
+
+	*///?}
 	/**
 	 * Formats an address the way the player typed it, so the key matches what the multiplayer
 	 * list would have produced. {@code toString()} would spell it "localhost/127.0.0.1:25565"

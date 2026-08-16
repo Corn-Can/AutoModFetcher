@@ -2,19 +2,24 @@ package com.corncan.automodfetcher;
 
 //? if neoforge {
 /*import com.corncan.automodfetcher.client.ClientSetup;
+import com.corncan.automodfetcher.server.AutoModFetcherCommand;
+import com.corncan.automodfetcher.server.ServerNetworking;
+import com.corncan.automodfetcher.server.ServerNetworkingNeoForge;
 
+import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.network.event.RegisterConfigurationTasksEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
-/// NeoForge's way in. The work itself is in {@link AutoModFetcher#init()} and
-/// {@link ClientSetup}.
+/// NeoForge's way in. The work itself is in [AutoModFetcher#init()] and [ClientSetup].
 ///
 /// Unlike Fabric, there is no hook that runs before the mod jars are opened, so pending
 /// removals are attempted here — the earliest point this mod gets to run at all.
@@ -24,24 +29,18 @@ public class AutoModFetcherNeoForge {
 		PendingOpsApplier.run();
 		AutoModFetcher.init();
 
-		net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-				(ServerStartedEvent event) -> com.corncan.automodfetcher.server.ServerNetworking
-						.onServerStarted(event.getServer()));
-		net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-				(ServerStoppedEvent event) -> com.corncan.automodfetcher.server.ServerNetworking
-						.onServerStopped());
-		net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-				(RegisterCommandsEvent event) -> event.getDispatcher()
-						.register(com.corncan.automodfetcher.server.AutoModFetcherCommand.tree()));
+		modBus.addListener(ServerNetworkingNeoForge::registerPayloads);
+		modBus.addListener(ServerNetworkingNeoForge::registerTasks);
+
+		IEventBus gameBus = NeoForge.EVENT_BUS;
+		gameBus.addListener((ServerStartedEvent event) -> ServerNetworking.onServerStarted(event.getServer()));
+		gameBus.addListener((ServerStoppedEvent event) -> ServerNetworking.onServerStopped());
+		gameBus.addListener((RegisterCommandsEvent event) ->
+				event.getDispatcher().register(AutoModFetcherCommand.tree()));
 
 		if (dist.isClient()) {
 			modBus.addListener((FMLClientSetupEvent event) -> ClientSetup.init());
-
-			net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-					(ClientTickEvent.Post event) -> ClientSetup.tick(
-							net.minecraft.client.Minecraft.getInstance()));
-			net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
-					(ClientPlayerNetworkEvent.LoggingOut event) -> ClientSetup.onDisconnect());
+			gameBus.addListener((ClientTickEvent.Post event) -> ClientSetup.tick(Minecraft.getInstance()));
 		}
 	}
 }

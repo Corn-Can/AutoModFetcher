@@ -18,6 +18,8 @@ fun runDirFor(name: String): String = projectDir.toPath()
 	.relativize(rootProject.file("run/${sc.current.project}/$name").toPath())
 	.toString()
 
+val quickPlayServer: String? = providers.gradleProperty("amf.quickPlay").orNull
+
 dependencies {
 	minecraft("com.mojang:minecraft:${sc.current.version}")
 
@@ -45,6 +47,11 @@ loom {
 			// Loom randomises the dev username each launch, which makes it impossible to
 			// keep an ops entry pointing at you. Pin it.
 			programArgs("--username", "CornCan")
+
+			// -Pamf.quickPlay=host:port connects on launch. Verifying this mod means
+			// watching a whole join, and a client waiting on a mouse click cannot be part
+			// of a script.
+			quickPlayServer?.let { programArgs("--quickPlayMultiplayer", it) }
 		}
 		named("server") {
 			runDir = runDirFor("server")

@@ -13,6 +13,8 @@ base.archivesName = "${property("mod.id")}-neoforge"
 // another, and a NeoForge mods folder is not a Fabric one.
 fun runDirFor(name: String) = rootProject.file("run/${sc.current.project}/$name")
 
+val quickPlayServer: String? = providers.gradleProperty("amf.quickPlay").orNull
+
 neoForge {
 	version = property("deps.neo_loader") as String
 
@@ -36,6 +38,10 @@ neoForge {
 			// NeoForge randomises the dev username too, which makes it impossible to keep an
 			// ops entry pointing at you.
 			programArguments.addAll("--username", "CornCan")
+
+			// -Pamf.quickPlay=host:port connects on launch. Verifying this mod means watching
+			// a whole join, and a client waiting on a mouse click cannot be part of a script.
+			quickPlayServer?.let { programArguments.addAll("--quickPlayMultiplayer", it) }
 		}
 
 		register("server") {
