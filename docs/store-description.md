@@ -55,7 +55,8 @@ Use `/automodfetcher reload` to rebuild the manifest without restarting the serv
 
 *   **Supported:** Minecraft **1.20.1** (Fabric, Forge) and **1.21.1** (Fabric, NeoForge)
 *   **Requirements:** the matching loader. On Fabric you also need **Fabric API**; Forge and NeoForge need nothing extra.
-*   **Installation:** Must be installed on **both** the Server and the Client (Dedicated servers only; LAN worlds are not supported).
+*   **Installation:** Must be installed on **both** the Server and the Client. Works on dedicated servers and on worlds opened to LAN — including Essential's "invite friends" — since those are the same thing from a joining player's side.
+*   **Hosting Your Own World:** Your mods folder is yours, not a server's. When you open a world, the chat tells you how many mods will be offered to anyone who joins, and `excludeFileNames` keeps the rest to yourself.
 *   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code.
 *   **"Restart Now" is Fabric-only:** Forge and NeoForge do not keep the arguments the game was started with, so the command cannot be rebuilt. You get "Quit" there instead of a button that would not work.
 *   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that. Players will receive a direct link to download it manually.
