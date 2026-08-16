@@ -2,6 +2,8 @@
 
 **北極星目標：玩家一鍵進入伺服器。**
 
+*目前支援：Fabric 1.20.1 · Fabric 1.21.1 · NeoForge 1.21.1 · Forge 1.20.1*
+
 底下每一項都用同一個標準衡量——它減少了玩家幾個動作？沒有減少的，排在後面。
 
 ---
@@ -152,7 +154,33 @@ AutoModFetcher 在這之後負責的是**後續更新**，而不是初次安裝�
 
 驗證方式一樣是真的跑：真實 Fabric 1.21.1 伺服器 + 真實客戶端，確認畫面 → 下載 → 重啟 → 成功進入遊戲。
 
-### 5.2 更多語言
+### 5.2 支援 Forge 與 NeoForge — ✅ 已完成
+
+四個目標：**Fabric 1.20.1 / Fabric 1.21.1 / NeoForge 1.21.1 / Forge 1.20.1**，一份原始碼，
+Stonecutter 一個節點一個組合。
+
+要問 loader 的問題收斂成 `Loader` 一個介面——遊戲目錄、實際載入了哪些 jar、我們自己的 jar
+是哪個、loader 叫什麼名字。其餘碰到 loader 的都是進入點，薄到只剩一行 `init()`。
+
+**最大的意外是：Forge 和 NeoForge 都會在我們開口之前就把玩家踢掉。**
+
+NeoForge 在 configuration 階段一開始做頻道協商，不合就斷線，任何 configuration task 都排在
+它後面。Forge 更早也更嚴——缺一個模組就夠了，不必牽涉頻道。兩邊都只剩一個地方還來得及：
+**login 階段**。Fabric API 直接提供 login query，另外兩個沒有，所以用 mixin 補上。
+
+| | mixin 數 | 為什麼 |
+|---|---|---|
+| Fabric | 0 | Fabric API 本來就有 |
+| NeoForge 1.21.1 | 4 | 兩個攔封包（vanilla 對不認識的 login payload 是讀完就丟），兩個負責問與答 |
+| Forge 1.20.1 | 1 | 1.20.1 的封包直接帶 buffer，而且 Forge 把 tick 與封包都繞過 `NetworkHooks` |
+
+一路上被版本差異告知的三件事：access transformer 在 Forge 1.20.1 是 SRG、在 NeoForge 是
+Mojang 名字；mixin config 在 Forge 1.20.1 宣告在 jar manifest 而不是 mods.toml；Forge 和
+NeoForge 都不保留啟動參數，所以「立即重新啟動」在那兩邊不提供，完成畫面退回「關閉遊戲」。
+
+四個節點都是真伺服器 + 真客戶端跑過整段旅程，包含「沒裝這個模組的客戶端照樣進得去」。
+
+### 5.3 更多語言
 目前只有繁體中文與英文。
 
 ---

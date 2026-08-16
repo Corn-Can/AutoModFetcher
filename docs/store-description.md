@@ -42,16 +42,22 @@ Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and Cur
 🔄 **Hot-Reload Manifest:**
 Use `/automodfetcher reload` to rebuild the manifest without restarting the server.
 
+## 🧩 Every Loader, One Behaviour
+
+> Fabric, Forge and NeoForge each turn an incompatible client away at a different moment, and all three do it before a mod would normally get to speak. AutoModFetcher reaches the player during login, ahead of that check — so instead of a wall that says "Incompatible client", they get a list of what is missing and a button.
+
 ## 💡 Works with the Vanilla Launcher
-> The official Minecraft launcher doesn't support modpacks. AutoModFetcher is the perfect bridge—players just install Fabric, drop in two jars (Fabric API + AutoModFetcher), and the server handles the rest.
+> The official Minecraft launcher doesn't support modpacks. AutoModFetcher is the perfect bridge—players just install their loader, drop in the jar, and the server handles the rest.
 
 ---
 
 ## 📋 Requirements & Important Notes
 
-*   **Requirements:** Minecraft **1.20.1** or **1.21.1** | Fabric Loader | **Fabric API**
+*   **Supported:** Minecraft **1.20.1** (Fabric, Forge) and **1.21.1** (Fabric, NeoForge)
+*   **Requirements:** the matching loader. On Fabric you also need **Fabric API**; Forge and NeoForge need nothing extra.
 *   **Installation:** Must be installed on **both** the Server and the Client (Dedicated servers only; LAN worlds are not supported).
-*   **Restart is Mandatory:** Due to how Java class loading works, Fabric only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code.
+*   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code.
+*   **"Restart Now" is Fabric-only:** Forge and NeoForge do not keep the arguments the game was started with, so the command cannot be rebuilt. You get "Quit" there instead of a button that would not work.
 *   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that. Players will receive a direct link to download it manually.
 *   **File Deletion:** Removed mods are deleted on the *next* launch, as Java locks running `.jar` files.
 ---

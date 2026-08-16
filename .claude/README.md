@@ -3,9 +3,14 @@
 ## 📖 專案簡介
 AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型模組 (Bootstrap Mod)」。
 
-> **目前的建置目標**：Fabric **1.20.1**（Java 17）與 Fabric **1.21.1**（Java 21）。
-> 每個目標的 loader 版本、Fabric API 版本與相容範圍都寫在 `stonecutter.properties.toml`。
-> Gradle daemon 與編譯用 JDK 21（本機沒有 JDK 17），靠 `options.release` 產生對應版本的 class 檔。
+> **目前的建置目標**：Fabric **1.20.1**、Forge **1.20.1**（皆 Java 17）、Fabric **1.21.1**、
+> NeoForge **1.21.1**（皆 Java 21）。每個目標的 loader 版本與相容範圍都寫在
+> `stonecutter.properties.toml`。Fabric 節點用 JDK 21 toolchain + `options.release=17`；
+> Forge 節點需要真的 JDK 17，settings 裡的 toolchain resolver 會自動取得。
+>
+> **Forge 與 NeoForge 都會在模組開口之前就踢掉不相容的客戶端**，所以那兩邊靠
+> `src/main/java/.../mixin/` 在 login 階段搶先問一次。Fabric 不需要，Fabric API 本來就有
+> login query。
 >
 > **為什麼不是 Yarn**：Yarn 只到 1.21.11，而 NeoForge 原生就用 Mojang 的名字。要同時支援
 > Fabric 與 NeoForge、又要能往上跟到新版本，Mojang mappings 是唯一走得通的選擇。原始碼裡的
@@ -86,7 +91,10 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
 settings.gradle.kts                 Stonecutter 節點宣告，一個 (MC 版本, loader) 組合一個節點
 stonecutter.gradle.kts              目前啟用哪個節點；把 loader 名稱注入 `//? if fabric {` 常數
 stonecutter.properties.toml         所有版本/loader 相關的數字（mod 版本、loader 版本、相容範圍）
-build.fabric.gradle.kts             Fabric 節點的建置腳本；toolchain JDK 21 + release 17
+build.fabric.gradle.kts             Fabric 節點；toolchain JDK 21 + release 17
+build.neoforge.gradle.kts           NeoForge 節點；ModDevGradle
+build.forge.gradle.kts              Forge 節點；ModDevGradle legacyforge，JDK 17
+buildSrc/                           createMinecraftArtifacts 的互斥鎖，避免兩個節點同時重編 Minecraft
 versions/<節點>/                    Stonecutter 產生，不進版控
 gradle/gradle-daemon-jvm.properties Gradle daemon 鎖 JDK 21（本機 PATH 上是 Java 26，會編不動 build script）
 src/main/
