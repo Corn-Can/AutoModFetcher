@@ -1,0 +1,12 @@
+{
+	"required": true,
+	"minVersion": "0.8.5",
+	"package": "com.corncan.automodfetcher.mixin",
+	"compatibilityLevel": "JAVA_17",
+	"mixins": [
+		"NetworkHooksMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

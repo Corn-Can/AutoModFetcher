@@ -19,6 +19,14 @@ mod.mc_compat = "1.20.1"
 mod.java = ">=17"
 deps.fabric_api = "0.92.11+1.20.1"
 
+[forge."1.20.1"]
+# Forge spells compatibility as a Maven range, like NeoForge.
+mod.mc_compat = "[1.20.1]"
+mod.java = ">=17"
+# Built against the version this is actually tested on. mods.toml accepts [47,), so the jar
+# still runs on any 47.x — but the build should match what was put in front of a real server.
+deps.forge_loader = "1.20.1-47.4.0"
+
 ["1.21.1"]
 mod.mc_releases = ["1.21.1"]
 

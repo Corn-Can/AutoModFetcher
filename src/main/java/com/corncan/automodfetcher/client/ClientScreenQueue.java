@@ -2,6 +2,8 @@ package com.corncan.automodfetcher.client;
 
 import java.util.function.Function;
 
+import com.corncan.automodfetcher.AutoModFetcher;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -54,6 +56,7 @@ public final class ClientScreenQueue {
 		}
 
 		if (client.screen instanceof DisconnectedScreen disconnected) {
+			AutoModFetcher.LOGGER.debug("Disconnect screen is up; showing the sync screen");
 			//? if >=1.21 {
 			/*Component reason = disconnected.details.reason();
 			*///?} else {
@@ -65,6 +68,11 @@ public final class ClientScreenQueue {
 		}
 
 		if (guard-- <= 0) {
+			// The screen the player was about to be shown never got its moment. Saying so
+			// beats leaving them looking at whatever the game put up instead and no trace of
+			// why, which is exactly what happened while this was silent.
+			AutoModFetcher.LOGGER.warn("Gave up waiting for the disconnect screen; "
+					+ "the sync screen was not shown");
 			clear();
 		}
 	}

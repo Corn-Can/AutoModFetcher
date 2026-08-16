@@ -1,0 +1,29 @@
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "ARR"
+issueTrackerURL = "https://github.com/Corn-Can/AutoModFetcher/issues"
+
+[[mods]]
+modId = "${id}"
+version = "${version}"
+displayName = "${name}"
+authors = "CornCan"
+logoFile = "assets/automodfetcher/icon.png"
+description = '''
+Automatically syncs the mods a server requires. On join, the server sends its mod manifest;
+the client downloads whatever is missing and prompts for a restart.
+'''
+
+[[dependencies.${id}]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${id}]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft}"
+ordering = "NONE"
+side = "BOTH"

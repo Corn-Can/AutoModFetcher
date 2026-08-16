@@ -11,6 +11,10 @@ pluginManagement {
 plugins {
 	id("dev.kikugie.stonecutter") version "0.9.7"
 
+	// Forge 1.20.1 has to be built and run on Java 17, and nobody should have to install a
+	// second JDK by hand to build one node of this. Gradle fetches it on demand.
+	id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+
 	// Picks the right Loom variant for the Minecraft version being built, and gives
 	// loomx.applyMojangMappings(). Loom's API changed shape in 26.1, so hard-coding one
 	// variant would put a ceiling on how far this mod can follow Minecraft.
@@ -27,7 +31,7 @@ stonecutter {
 			}
 		}
 
-		match("1.20.1", "fabric")
+		match("1.20.1", "fabric", "forge")
 		match("1.21.1", "fabric", "neoforge")
 
 		vcsVersion = "1.20.1-fabric"

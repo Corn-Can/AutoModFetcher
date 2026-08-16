@@ -79,7 +79,8 @@ tasks {
 
 		// Fabric's metadata and access widener have no meaning here and would only confuse
 		// anyone opening the jar.
-		exclude("fabric.mod.json", "*.accesswidener")
+		exclude("fabric.mod.json", "*.accesswidener", "META-INF/mods.toml",
+				"automodfetcher-forge.mixins.json")
 	}
 
 	// Stonecutter has to have rewritten the sources before NeoForge goes looking at them.

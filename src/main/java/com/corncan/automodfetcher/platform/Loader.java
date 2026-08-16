@@ -16,9 +16,16 @@ import com.corncan.automodfetcher.AutoModFetcher;
  * wrong, and a list this size can be checked by hand when one is added.
  */
 public interface Loader {
+	/// Adding a loader without adding a branch here fails to compile, which is the right
+	/// way round: an unassigned INSTANCE names itself in the error.
 	Loader INSTANCE =
-			/*? if fabric {*/ new FabricLoader();
-			/*?} elif neoforge *///new NeoForgeLoader();
+			//? if fabric {
+			new FabricLoader();
+			//?} elif neoforge {
+			/*new NeoForgeLoader();
+			*///?} elif forge {
+			/*new ForgeLoader();
+			*///?}
 
 	/** Where per-mod config files live, without this mod's own folder appended. */
 	Path configDir();
@@ -192,6 +199,63 @@ public interface Loader {
 		@Override
 		public String loaderVersion() {
 			String version = modVersion("neoforge");
+			return version != null ? version : "";
+		}
+	}
+	*///?}
+
+	//? if forge {
+	/*final class ForgeLoader implements Loader {
+		@Override
+		public Path configDir() {
+			return net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get();
+		}
+
+		@Override
+		public Path gameDir() {
+			return net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get();
+		}
+
+		@Override
+		public String modVersion(String modId) {
+			return net.minecraftforge.fml.ModList.get().getModContainerById(modId)
+					.map(container -> container.getModInfo().getVersion().toString())
+					.orElse(null);
+		}
+
+		@Override
+		public Set<String> loadedJarFileNames() {
+			Set<String> names = new HashSet<>();
+
+			for (var file : net.minecraftforge.fml.ModList.get().getModFiles()) {
+				addFileName(names, file.getFile().getFilePath());
+			}
+
+			return names;
+		}
+
+		@Override
+		public Path ownJar() {
+			var file = net.minecraftforge.fml.ModList.get().getModFileById(AutoModFetcher.MOD_ID);
+			return file != null ? file.getFile().getFilePath() : null;
+		}
+
+		@Override
+		public String[] launchArguments() {
+			// Same as NeoForge: not kept, and Windows will not hand a process its own argument
+			// array back. The complete screen falls back to "quit" rather than promising a
+			// restart it cannot do.
+			return null;
+		}
+
+		@Override
+		public String packLoaderId() {
+			return "forge";
+		}
+
+		@Override
+		public String loaderVersion() {
+			String version = modVersion("forge");
 			return version != null ? version : "";
 		}
 	}
