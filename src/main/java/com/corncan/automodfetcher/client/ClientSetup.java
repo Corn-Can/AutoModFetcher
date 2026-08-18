@@ -1,6 +1,7 @@
 package com.corncan.automodfetcher.client;
 
 import com.corncan.automodfetcher.AutoModFetcher;
+import com.corncan.automodfetcher.PendingOpsHandoff;
 import com.corncan.automodfetcher.client.gui.ModSyncDisconnectScreen;
 
 import net.minecraft.client.Minecraft;
@@ -23,10 +24,17 @@ public final class ClientSetup {
 		// Started now so the hash index is ready long before the player picks a server.
 		ClientModIndex.beginScan();
 
+		// Removals cannot take effect in the launch that performs them, so they are handed to
+		// a helper on the way out instead. Armed here, at the start, because by the time there
+		// is work to hand off the player may already be quitting.
+		PendingOpsHandoff.arm();
+
 		ClientSync.configure(config);
 
 		//? if fabric {
 		ClientNetworking.register();
+		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING
+				.register(client -> PendingOpsHandoff.handOff());
 		//?}
 	}
 

@@ -40,6 +40,11 @@ public class AutoModFetcherForge {
 				event.getDispatcher().register(AutoModFetcherCommand.tree()));
 
 		if (FMLEnvironment.dist.isClient()) {
+			// The mods folder is put right after this process dies, so the player's next
+			// launch is already correct rather than needing a second one.
+			MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.event.GameShuttingDownEvent event) ->
+					PendingOpsHandoff.handOff());
+
 			FMLJavaModLoadingContext.get().getModEventBus()
 					.addListener((FMLClientSetupEvent event) -> ClientSetup.init());
 

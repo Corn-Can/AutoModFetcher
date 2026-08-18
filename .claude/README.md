@@ -124,9 +124,27 @@ manifest 除了檔案清單，還帶一份 `serverModIds`——伺服器實際�
 實測（1.20.1-fabric）：客戶端 log 裡 `- privatetestmod 1.0.0` 出現在「Loading N mods」清單，
 而 `Moved privatetestmod-1.0.0.jar to ...` 在其後——同一輪，先載入後搬走。
 
-這一輪去連伺服器必掉，而且踢出訊息不會提到原因。所以 `PendingOpsApplier.changedThisLaunch()`
-記下這件事，`ClientSync.decide()` 在最前面檢查它，直接出 `ModSyncRestartScreen`。
-這是整個模組唯一一處「擋下來」而不是「警告」——因為除了再重啟一次，沒有別的出路。
+這一輪去連伺服器必掉，而且踢出訊息不會提到原因。
+
+**解法是把工作移到遊戲外面。** `PendingOpsHandoff` 在關閉時派生 `PendingOpsHelper`，
+它等我們的 PID 消失、檔案解鎖，才去動 `mods/`。玩家下次啟動時資料夾已經正確——**一次重啟**。
+
+幾個關鍵約束：
+
+*   `PendingOpsHelper` **只能用 `java.base`**。它以 mod jar 單獨當 classpath 執行，
+    沒有 Minecraft、沒有 loader、沒有 Gson——所以工作清單是用命令列參數傳的，不是讀 JSON。
+*   classpath 用 `PendingOpsHelper.class.getProtectionDomain().getCodeSource()` 取，
+    不是 `Loader.ownJar()`。dev 環境的模組橫跨 classes 與 resources 兩個目錄，
+    `ownJar()` 只回第一個，挑錯就是 helper 啟動即 ClassNotFound 而且靜默（輸出被丟棄）。
+*   觸發點是**各 loader 自己的關閉事件**（Fabric `CLIENT_STOPPING`、Forge/NeoForge
+    `GameShuttingDownEvent`），不是 JVM shutdown hook。實測 hook 在 Minecraft 的關閉流程裡
+    不可靠，而且那時 log4j 常常已經關了，失敗連痕跡都沒有。hook 仍保留當後備，
+    `handOff()` 用 `AtomicBoolean` 保證只做一次。
+*   **不重啟遊戲。** 從遊戲裡重啟在會監管子程序的啟動器上本來就不可靠，而且沒必要。
+
+helper 沒跑成功時完全退回舊行為：`PendingOpsApplier` 下次啟動照做，
+`changedThisLaunch()` 為 true，`ClientSync.decide()` 出 `ModSyncRestartScreen` 擋下連線。
+這是整個模組唯一一處「擋下來」而不是「警告」——因為那個狀態除了再重啟一次沒有別的出路。
 
 ### ⚠️ 已知限制：Windows 檔案鎖
 遊戲執行中無法刪除已被 Fabric loader 開啟的 jar。因此移除是延後的：寫入 `pending-ops.json`，由 `preLaunch` entrypoint 在下次啟動時處理。刪不掉就留在清單裡下次再試，並在 log 提示玩家手動刪除。
@@ -150,7 +168,9 @@ src/main/
     AutoModFetcher.java             common 入口（註冊封包型別 + 伺服器事件）
     AutoModFetcherClient.java       client 入口
     PendingOps.java                 待處理檔案操作的資料模型
-    PendingOpsApplier.java          preLaunch entrypoint，下次啟動時執行刪除
+    PendingOpsApplier.java          preLaunch entrypoint，下次啟動時執行刪除（後備路徑）
+    PendingOpsHandoff.java          關閉時把待處理操作交給獨立程序
+    PendingOpsHelper.java           那個獨立程序；只用 java.base，等 PID 結束後動檔案
     network/                        Channels / ModEntry / ModSide / ModManifest / ModBundle / BundledMod
                                     （手寫 FriendlyByteBuf 序列化；bundles 寫在最後並以 readableBytes 守衛，
                                      這是兩端唯一能各自升級的地方）

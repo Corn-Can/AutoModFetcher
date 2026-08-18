@@ -35,6 +35,11 @@ public class AutoModFetcherNeoForge {
 				event.getDispatcher().register(AutoModFetcherCommand.tree()));
 
 		if (dist.isClient()) {
+			// The mods folder is put right after this process dies, so the player's next
+			// launch is already correct rather than needing a second one.
+			gameBus.addListener((net.neoforged.neoforge.event.GameShuttingDownEvent event) ->
+					PendingOpsHandoff.handOff());
+
 			modBus.addListener((FMLClientSetupEvent event) -> ClientSetup.init());
 			gameBus.addListener((ClientTickEvent.Post event) -> ClientSetup.tick(Minecraft.getInstance()));
 		}
