@@ -28,8 +28,8 @@ public final class ClientNetworkingForge {
 		ModManifest manifest = ModManifest.read(data);
 		rememberServer(handler);
 
-		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved",
-				manifest.entries().size(), manifest.unresolved().size());
+		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved, {} bundle(s)",
+				manifest.entries().size(), manifest.unresolved().size(), manifest.bundles().size());
 
 		CompletableFuture
 				.supplyAsync(() -> ClientSync.decide(manifest))

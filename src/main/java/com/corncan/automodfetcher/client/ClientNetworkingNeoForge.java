@@ -22,8 +22,8 @@ public final class ClientNetworkingNeoForge {
 			ClientHandshakePacketListenerImpl handler) {
 		ClientSession.rememberFromConnectScreen();
 
-		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved",
-				manifest.entries().size(), manifest.unresolved().size());
+		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved, {} bundle(s)",
+				manifest.entries().size(), manifest.unresolved().size(), manifest.bundles().size());
 
 		// Off the network thread: comparing against the mods folder reads files. The server is
 		// holding the login open until we answer, so there is no hurry and no reason to block

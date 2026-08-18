@@ -26,6 +26,19 @@ public class ServerSyncConfig {
 	/** Download URLs for mods neither platform can resolve, keyed by exact file name. */
 	public Map<String, String> manualUrls = new LinkedHashMap<>();
 
+	/**
+	 * Where the operator uploaded the zip built by {@code /automodfetcher bundle}.
+	 *
+	 * <p>For mods no platform carries at all — something you wrote, built privately, or are
+	 * running a since-removed version of. Leave it blank and the feature stays off.
+	 *
+	 * <p>Must be a direct download. A share page that hands a downloader HTML instead of the
+	 * zip (Google Drive's /view, GitHub's /blob/) fails the hash check rather than installing
+	 * anything — safe, but baffling to a player. {@code /automodfetcher bundle verify} says so
+	 * out loud before anyone else has to find out.
+	 */
+	public String bundleUrl = "";
+
 	/** Server-side-only mods are pointless for clients to download, so they are skipped. */
 	public boolean includeServerOnlyMods = false;
 

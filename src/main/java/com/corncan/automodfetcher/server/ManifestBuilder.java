@@ -8,14 +8,19 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.corncan.automodfetcher.AutoModFetcher;
+import com.corncan.automodfetcher.network.BundledMod;
 import com.corncan.automodfetcher.network.ManualEntry;
+import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.server.ServerModScanner.ScannedMod;
+import com.corncan.automodfetcher.server.export.BundleBuilder;
 import com.corncan.automodfetcher.server.resolver.CurseForgeResolver;
 import com.corncan.automodfetcher.server.resolver.ModrinthResolver;
 import com.corncan.automodfetcher.server.resolver.ResolveCache;
@@ -78,7 +83,102 @@ public final class ManifestBuilder {
 		cache.retainOnly(knownSha1);
 		cache.save();
 
-		return assemble(mods, resolved, pages);
+		return attachBundle(assemble(mods, resolved, pages), config);
+	}
+
+	/**
+	 * Folds in the operator's own zip, if they built and published one.
+	 *
+	 * <p>Mods the bundle carries stop being "install this yourself" — they now have a route,
+	 * and leaving them in {@code unresolved} would tell every player to go and fetch a file
+	 * that is about to arrive on its own.
+	 */
+	private static ModManifest attachBundle(ModManifest manifest, ServerSyncConfig config) {
+		List<String> unknown = manifest.unresolved().stream()
+				.filter(entry -> !entry.hasPage())
+				.map(ManualEntry::fileName)
+				.toList();
+
+		if (config.bundleUrl == null || config.bundleUrl.isBlank()) {
+			// Two different situations, and only one of them is yours to fix. A file no platform
+			// carries can be bundled or given a manualUrls entry. A file whose author switched
+			// off third-party downloads must not be — hosting it yourself is the very thing they
+			// opted out of.
+			if (!unknown.isEmpty()) {
+				AutoModFetcher.LOGGER.warn(
+						"No platform carries: {}. Run /automodfetcher bundle to pack them into a zip "
+								+ "you can host, or add a download URL to manualUrls in config/{}/{}. "
+								+ "Until then players are asked to install these by hand.",
+						String.join(", ", unknown), AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
+			}
+
+			return manifest;
+		}
+
+		ModBundle bundle;
+
+		try {
+			bundle = BundleBuilder.describe(config.bundleUrl);
+		} catch (IOException e) {
+			AutoModFetcher.LOGGER.error("Could not read the mod bundle; players will not be offered it", e);
+			return manifest;
+		}
+
+		if (bundle == null) {
+			AutoModFetcher.LOGGER.warn("bundleUrl is set but no bundle has been built yet. "
+					+ "Run /automodfetcher bundle, then upload the zip it writes.");
+			return manifest;
+		}
+
+		// Only what this server still actually runs. A zip built before a mod was removed is
+		// otherwise perfectly valid and would go on handing clients a jar nothing here loads.
+		Set<String> stillNeeded = unknown.stream()
+				.map(fileName -> fileName.toLowerCase(Locale.ROOT))
+				.collect(Collectors.toSet());
+
+		List<BundledMod> current = bundle.contents().stream()
+				.filter(mod -> stillNeeded.contains(mod.fileName().toLowerCase(Locale.ROOT)))
+				.toList();
+
+		if (current.size() < bundle.contents().size()) {
+			AutoModFetcher.LOGGER.info("{} file(s) in the bundle are no longer on this server and "
+					+ "will not be offered", bundle.contents().size() - current.size());
+		}
+
+		if (current.isEmpty()) {
+			AutoModFetcher.LOGGER.warn("Nothing in the bundle is still needed here. Rebuild it with "
+					+ "/automodfetcher bundle, or clear bundleUrl.");
+			return manifest;
+		}
+
+		bundle = new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), current);
+
+		Set<String> bundled = current.stream()
+				.map(mod -> mod.fileName().toLowerCase(Locale.ROOT))
+				.collect(Collectors.toSet());
+
+		List<ManualEntry> stillManual = manifest.unresolved().stream()
+				.filter(entry -> !bundled.contains(entry.fileName().toLowerCase(Locale.ROOT)))
+				.toList();
+
+		// A zip built before the last mod change still looks valid — it just no longer covers
+		// everything. Saying which files fell out is the only way an operator finds out before
+		// a player does.
+		List<String> missed = unknown.stream()
+				.filter(fileName -> !bundled.contains(fileName.toLowerCase(Locale.ROOT)))
+				.toList();
+
+		if (!missed.isEmpty()) {
+			AutoModFetcher.LOGGER.warn(
+					"The bundle does not cover: {}. Rebuild it with /automodfetcher bundle and "
+							+ "upload it again, or those players will still be installing by hand.",
+					String.join(", ", missed));
+		}
+
+		AutoModFetcher.LOGGER.info("Offering a bundle of {} mod(s) from {}", bundle.contents().size(),
+				bundle.url());
+
+		return new ModManifest(manifest.entries(), List.copyOf(stillManual), List.of(bundle));
 	}
 
 	private static void lookUpOnPlatforms(ServerSyncConfig config, List<ScannedMod> needLookup,
@@ -188,19 +288,9 @@ public final class ManifestBuilder {
 							+ "this server's exact file", rebuilds);
 		}
 
-		// Two different situations, and only one of them is yours to fix. A file no platform
-		// carries can go in manualUrls. A file whose author switched off third-party
-		// downloads must not — hosting it yourself is the very thing they opted out of.
-		List<String> unknown = unresolved.stream().filter(entry -> !entry.hasPage())
-				.map(ManualEntry::fileName).toList();
+		// Files no platform carries are reported by attachBundle instead, which knows whether
+		// there is a bundle to put them in and so can name the right way out.
 		List<ManualEntry> withheld = unresolved.stream().filter(ManualEntry::hasPage).toList();
-
-		if (!unknown.isEmpty()) {
-			AutoModFetcher.LOGGER.warn(
-					"No platform carries: {}. Add a download URL to manualUrls in config/{}/{}, "
-							+ "or players will be asked to install these by hand.",
-					String.join(", ", unknown), AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
-		}
 
 		for (ManualEntry entry : withheld) {
 			AutoModFetcher.LOGGER.warn(

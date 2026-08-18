@@ -12,8 +12,6 @@
 	"automodfetcher.confirm.section.manual": "請自行安裝（%s 個）：",
 	"automodfetcher.confirm.open_page": "    開啟 %s",
 	"automodfetcher.confirm.section.remove": "下次啟動時移除（%s 個）：",
-	"automodfetcher.confirm.blocked_hint": "  若你信任該來源，可將網域加入 %s 的 allowedDomains。",
-	"automodfetcher.blocked.domain": "    網域 %s 不在你的白名單中",
 	"automodfetcher.blocked.file_name": "    伺服器送來的檔名不安全",
 	"automodfetcher.progress.title": "正在下載模組",
 	"automodfetcher.progress.cancel": "取消",
@@ -45,5 +43,15 @@
 	"automodfetcher.command.reloading": "正在重建模組清單……",
 	"automodfetcher.progress.rate": "%s/s — 約剩 %s",
 	"automodfetcher.host.sharing": "AutoModFetcher：你的 %s 個模組會提供給加入這個世界的人。",
-	"automodfetcher.host.exclude_hint": "不想分享某些模組的話，把檔名加進 %s 的 excludeFileNames。"
+	"automodfetcher.host.exclude_hint": "不想分享某些模組的話，把檔名加進 %s 的 excludeFileNames。",
+	"automodfetcher.confirm.section.untrusted": "這個伺服器使用 Modrinth 與 CurseForge 以外的來源：",
+	"automodfetcher.confirm.untrusted_host": "    %s",
+	"automodfetcher.confirm.untrusted_warning": "  只有在你信任這個伺服器的管理員時才繼續。",
+	"automodfetcher.confirm.accept_untrusted": "我了解，安裝",
+	"automodfetcher.confirm.section.bundle": "將從 %2$s 上的模組包解壓 %1$s 個檔案：",
+	"automodfetcher.confirm.bundle_detail": "    只需下載一個 %s 的檔案",
+	"automodfetcher.blocked.insecure": "    以未加密的 http 傳送，無法信任",
+	"automodfetcher.progress.entry.extracting": "  %s  解壓中",
+	"automodfetcher.command.bundling": "正在打包沒有平台收錄的模組……",
+	"automodfetcher.command.bundle_verifying": "正在檢查已發佈的模組包……"
 }

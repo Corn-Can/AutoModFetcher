@@ -60,11 +60,11 @@ public class ModSyncCompleteScreen extends Screen {
 
 	private void retry() {
 		SyncPlan remaining = session.remainingWork();
-		DownloadSession next = new DownloadSession(remaining, session.config());
+		DownloadSession next = new DownloadSession(remaining, session.config(), session.policy());
 		next.start();
 
 		if (this.minecraft != null) {
-			this.minecraft.setScreen(new ModSyncProgressScreen(next, remaining.downloads()));
+			this.minecraft.setScreen(new ModSyncProgressScreen(next));
 		}
 	}
 

@@ -49,23 +49,42 @@ public class ClientConfig {
 
 	/** Checked for every URL and again for every redirect hop. */
 	public boolean isAllowed(String url) {
+		return isSchemeAllowed(url) && isHostAllowed(hostOrNull(url));
+	}
+
+	/**
+	 * Whether the transport itself is acceptable, regardless of who is on the other end.
+	 *
+	 * <p>Split out from {@link #isAllowed} because the two failures are not the same kind of
+	 * thing. An unrecognised host is a question a player can answer — they may well know and
+	 * trust where their server keeps its files. Plain HTTP is not: nobody can consent their way
+	 * out of a jar that anyone on the path can swap, so this check stays absolute.
+	 */
+	public boolean isSchemeAllowed(String url) {
 		try {
-			URI uri = URI.create(url);
-			String scheme = uri.getScheme();
+			String scheme = URI.create(url).getScheme();
 
 			if (scheme == null) {
 				return false;
 			}
 
-			boolean https = scheme.equalsIgnoreCase("https");
-
-			if (!https && !(allowInsecureHttp && scheme.equalsIgnoreCase("http"))) {
-				return false;
-			}
-
-			return isHostAllowed(uri.getHost());
+			return scheme.equalsIgnoreCase("https")
+					|| (allowInsecureHttp && scheme.equalsIgnoreCase("http"));
 		} catch (Exception e) {
 			return false;
+		}
+	}
+
+	/** Whether this URL's host is on the standing list every server may use. */
+	public boolean isHostAllowedFor(String url) {
+		return isHostAllowed(hostOrNull(url));
+	}
+
+	private static String hostOrNull(String url) {
+		try {
+			return URI.create(url).getHost();
+		} catch (Exception e) {
+			return null;
 		}
 	}
 

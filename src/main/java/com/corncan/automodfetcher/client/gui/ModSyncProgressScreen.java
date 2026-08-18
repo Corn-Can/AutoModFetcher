@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.corncan.automodfetcher.client.DownloadSession;
-import com.corncan.automodfetcher.network.ModEntry;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -13,13 +12,11 @@ import net.minecraft.network.chat.Component;
 
 public class ModSyncProgressScreen extends Screen {
 	private final DownloadSession session;
-	private final List<ModEntry> entries;
 	private final LineList list = new LineList();
 
-	public ModSyncProgressScreen(DownloadSession session, List<ModEntry> entries) {
+	public ModSyncProgressScreen(DownloadSession session) {
 		super(Component.translatable("automodfetcher.progress.title"));
 		this.session = session;
-		this.entries = entries;
 	}
 
 	@Override
@@ -101,20 +98,24 @@ public class ModSyncProgressScreen extends Screen {
 	private List<LineList.Line> buildLines() {
 		List<LineList.Line> lines = new ArrayList<>();
 
-		for (ModEntry entry : entries) {
-			DownloadSession.Status status = session.statusOf(entry.fileName());
+		for (DownloadSession.Row row : session.rows()) {
+			DownloadSession.Status status = session.statusOf(row.key());
 			int color = switch (status) {
 				case DONE -> LineList.Line.GREEN;
 				case FAILED -> LineList.Line.RED;
-				case DOWNLOADING -> LineList.Line.WHITE;
+				case DOWNLOADING, EXTRACTING -> LineList.Line.WHITE;
 				case PENDING -> LineList.Line.GREY;
 			};
 
+			// A bundle's members are indented under it, so the one zip being fetched reads as
+			// the reason all those files are about to appear.
+			String label = row.nested() ? "  " + row.label() : row.label();
+
 			lines.add(LineList.Line.of(Component.translatable(
 					"automodfetcher.progress.entry." + status.name().toLowerCase(java.util.Locale.ROOT),
-					entry.fileName()), color));
+					label), color));
 
-			String reason = session.failureReasonOf(entry.fileName());
+			String reason = session.failureReasonOf(row.key());
 
 			if (status == DownloadSession.Status.FAILED && reason != null) {
 				lines.add(LineList.Line.of(Component.literal("    " + reason), LineList.Line.GREY));

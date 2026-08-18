@@ -2,15 +2,20 @@ package com.corncan.automodfetcher.client.gui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import com.corncan.automodfetcher.client.ClientConfig;
 import com.corncan.automodfetcher.client.ClientSession;
 import com.corncan.automodfetcher.client.DownloadSession;
 import com.corncan.automodfetcher.client.LauncherDetection;
 import com.corncan.automodfetcher.client.SkipDecisions;
+import com.corncan.automodfetcher.client.SourcePolicy;
 import com.corncan.automodfetcher.client.SyncPlan;
 import com.corncan.automodfetcher.client.TrustedServers;
+import com.corncan.automodfetcher.client.TrustedSources;
+import com.corncan.automodfetcher.network.BundledMod;
 import com.corncan.automodfetcher.network.ManualEntry;
+import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.util.ModPaths;
 
@@ -31,19 +36,26 @@ import net.minecraft.network.chat.Component;
  *
  * <p>The source host is shown for every file on purpose: agreeing here means letting a server
  * put code on this machine, and the player should be able to see where it comes from.
+ *
+ * <p>When a file comes from somewhere other than the platform CDNs, that is said first and
+ * plainly. Pressing the button is how the host is granted — the agreement and the permission
+ * are the same act, rather than a warning the player is left to act on afterwards by editing a
+ * config file.
  */
 public class ModSyncConfirmScreen extends Screen {
 	private final SyncPlan plan;
 	private final ClientConfig config;
+	private final SourcePolicy policy;
 	private final LineList list = new LineList();
 
 	private boolean sharedInstall;
 	private Checkbox rememberChoice;
 
-	public ModSyncConfirmScreen(SyncPlan plan, ClientConfig config) {
+	public ModSyncConfirmScreen(SyncPlan plan, ClientConfig config, SourcePolicy policy) {
 		super(Component.translatable("automodfetcher.confirm.title"));
 		this.plan = plan;
 		this.config = config;
+		this.policy = policy;
 	}
 
 	@Override
@@ -89,9 +101,17 @@ public class ModSyncConfirmScreen extends Screen {
 
 		// Removals alone are still work to apply, so the action button must appear for them too.
 		if (plan.hasActionableWork()) {
-			Component acceptLabel = plan.downloads().isEmpty()
-					? Component.translatable("automodfetcher.confirm.apply")
-					: Component.translatable("automodfetcher.confirm.accept");
+			// Three different asks, and the strongest one has to win: agreeing to an
+			// unrecognised source is not the same promise as "download and install".
+			Component acceptLabel;
+
+			if (!plan.hostsNeedingConsent().isEmpty()) {
+				acceptLabel = Component.translatable("automodfetcher.confirm.accept_untrusted");
+			} else if (plan.downloads().isEmpty() && plan.bundles().isEmpty()) {
+				acceptLabel = Component.translatable("automodfetcher.confirm.apply");
+			} else {
+				acceptLabel = Component.translatable("automodfetcher.confirm.accept");
+			}
 
 			this.addRenderableWidget(Button.builder(acceptLabel, button -> startDownload())
 					.bounds(this.width / 2 - 154, buttonY, 150, 20)
@@ -120,6 +140,36 @@ public class ModSyncConfirmScreen extends Screen {
 	private List<LineList.Line> buildLines() {
 		List<LineList.Line> lines = new ArrayList<>();
 
+		// First, because it changes what everything below it means. A player who reads no
+		// further than the top of this list has still read the part that matters.
+		if (!plan.hostsNeedingConsent().isEmpty()) {
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.section.untrusted"), LineList.Line.RED));
+
+			for (String host : plan.hostsNeedingConsent()) {
+				lines.add(LineList.Line.of(
+						Component.translatable("automodfetcher.confirm.untrusted_host", host),
+						LineList.Line.YELLOW));
+			}
+
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.untrusted_warning"), LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		for (ModBundle bundle : plan.bundles()) {
+			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.section.bundle",
+					bundle.contents().size(), ClientConfig.hostOf(bundle.url())), LineList.Line.WHITE));
+
+			for (BundledMod mod : bundle.contents()) {
+				lines.add(LineList.Line.of(Component.literal("  " + mod.fileName()), LineList.Line.GREEN));
+			}
+
+			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.bundle_detail",
+					Sizes.format(bundle.size())), LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
 		if (!plan.downloads().isEmpty()) {
 			lines.add(LineList.Line.of(
 					Component.translatable("automodfetcher.confirm.section.download", plan.downloads().size()),
@@ -145,8 +195,6 @@ public class ModSyncConfirmScreen extends Screen {
 						ClientConfig.hostOf(blocked.entry().url())), LineList.Line.GREY));
 			}
 
-			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.blocked_hint",
-					ClientConfig.FILE_NAME), LineList.Line.GREY));
 			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 		}
 
@@ -218,11 +266,20 @@ public class ModSyncConfirmScreen extends Screen {
 			TrustedServers.load().trust(ClientSession.serverKey());
 		}
 
-		DownloadSession session = new DownloadSession(plan, config);
+		// Pressing the button is the grant. It is recorded for this server only, and never
+		// added to allowedDomains, which would hand the host to every other server too.
+		SourcePolicy granted = policy;
+
+		if (!plan.hostsNeedingConsent().isEmpty()) {
+			TrustedSources.load().grant(ClientSession.serverKey(), plan.hostsNeedingConsent());
+			granted = policy.plus(Set.copyOf(plan.hostsNeedingConsent()));
+		}
+
+		DownloadSession session = new DownloadSession(plan, config, granted);
 		session.start();
 
 		if (this.minecraft != null) {
-			this.minecraft.setScreen(new ModSyncProgressScreen(session, plan.downloads()));
+			this.minecraft.setScreen(new ModSyncProgressScreen(session));
 		}
 	}
 
@@ -238,7 +295,7 @@ public class ModSyncConfirmScreen extends Screen {
 
 		context.drawCenteredString(this.font, this.title, this.width / 2, 18, 0xFFFFFFFF);
 
-		if (!plan.downloads().isEmpty()) {
+		if (plan.incomingFileCount() > 0) {
 			context.drawCenteredString(this.font,
 					Component.translatable("automodfetcher.confirm.subtitle",
 							Sizes.format(plan.totalDownloadBytes())),

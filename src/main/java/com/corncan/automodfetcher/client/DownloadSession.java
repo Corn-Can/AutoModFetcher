@@ -25,9 +25,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.PendingOps;
+import com.corncan.automodfetcher.network.BundledMod;
+import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.util.Hashing;
 import com.corncan.automodfetcher.util.ModPaths;
@@ -36,18 +40,41 @@ import com.corncan.automodfetcher.util.ModPaths;
  * Downloads a plan's files on background threads and reports progress the GUI can poll.
  *
  * <p>A file only reaches {@code mods/} after its SHA-512 matches what the server said, so a
- * truncated or tampered download can never become an installed mod.
+ * truncated or tampered download can never become an installed mod. That holds for a bundle
+ * twice over: the zip is checked as a whole before it is opened, and every jar taken out of it
+ * is checked again on the way to the mods folder.
  */
 public class DownloadSession {
 	private static final int MAX_REDIRECTS = 5;
 	private static final int BUFFER_SIZE = 64 * 1024;
 
 	public enum Status {
-		PENDING, DOWNLOADING, DONE, FAILED
+		PENDING, DOWNLOADING, EXTRACTING, DONE, FAILED
+	}
+
+	/** One line the progress screen can draw. Members of a bundle are drawn under it. */
+	public record Row(String key, String label, boolean nested) {
+	}
+
+	/**
+	 * Anything that can be fetched: one mod jar, or one bundle zip.
+	 *
+	 * <p>They arrive by the same route and are checked the same way, so the fetching itself has
+	 * no reason to know which it is holding.
+	 */
+	private record Target(String key, String url, long size, String sha512) {
+		static Target of(ModEntry entry) {
+			return new Target(entry.fileName(), entry.url(), entry.size(), entry.sha512());
+		}
+
+		static Target of(ModBundle bundle) {
+			return new Target(keyOf(bundle), bundle.url(), bundle.size(), bundle.sha512());
+		}
 	}
 
 	private final SyncPlan plan;
 	private final ClientConfig config;
+	private final SourcePolicy policy;
 	private final HttpClient http;
 	private final ExecutorService executor;
 
@@ -72,9 +99,10 @@ public class DownloadSession {
 	private volatile boolean cancelled;
 	private volatile boolean finished;
 
-	public DownloadSession(SyncPlan plan, ClientConfig config) {
+	public DownloadSession(SyncPlan plan, ClientConfig config, SourcePolicy policy) {
 		this.plan = plan;
 		this.config = config;
+		this.policy = policy;
 
 		// Redirects are followed by hand so every hop can be re-checked against the allow list.
 		this.http = HttpClient.newBuilder()
@@ -91,15 +119,60 @@ public class DownloadSession {
 		int threads = Math.max(1, Math.min(config.maxConcurrentDownloads, 8));
 		this.executor = Executors.newFixedThreadPool(threads, factory);
 
-		for (ModEntry entry : plan.downloads()) {
-			statuses.put(entry.fileName(), Status.PENDING);
+		for (Row row : rows()) {
+			statuses.put(row.key(), Status.PENDING);
 		}
 	}
 
-	public void start() {
-		remaining.set(plan.downloads().size());
+	/** Every line to draw, bundles followed by the files they carry. */
+	public List<Row> rows() {
+		List<Row> rows = new ArrayList<>();
 
-		if (plan.downloads().isEmpty()) {
+		for (ModEntry entry : plan.downloads()) {
+			rows.add(new Row(entry.fileName(), entry.fileName(), false));
+		}
+
+		for (ModBundle bundle : plan.bundles()) {
+			rows.add(new Row(keyOf(bundle), displayNameOf(bundle), false));
+
+			for (BundledMod mod : bundle.contents()) {
+				rows.add(new Row(mod.fileName(), mod.fileName(), true));
+			}
+		}
+
+		return rows;
+	}
+
+	private static String keyOf(ModBundle bundle) {
+		// Keyed by hash rather than by URL so nothing a server sends can collide with a jar's
+		// name and quietly take over its row.
+		return "bundle:" + bundle.sha512().substring(0, Math.min(16, bundle.sha512().length()));
+	}
+
+	/** The zip's own name where the URL offers a sane one, for display only. */
+	private static String displayNameOf(ModBundle bundle) {
+		try {
+			String path = URI.create(bundle.url()).getPath();
+
+			if (path != null) {
+				String last = path.substring(path.lastIndexOf('/') + 1);
+
+				if (last.toLowerCase(Locale.ROOT).endsWith(".zip") && last.length() <= 64) {
+					return last;
+				}
+			}
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.debug("Could not name the bundle from its URL", e);
+		}
+
+		return "bundle.zip";
+	}
+
+	public void start() {
+		int tasks = plan.downloads().size() + plan.bundles().size();
+		remaining.set(tasks);
+
+		if (tasks == 0) {
 			// A removal-only plan still has state to write, so keep it off the render thread.
 			executor.submit(this::complete);
 			return;
@@ -112,14 +185,22 @@ public class DownloadSession {
 		}
 
 		for (ModEntry entry : plan.downloads()) {
-			executor.submit(() -> {
-				runOne(entry);
-
-				if (remaining.decrementAndGet() == 0) {
-					complete();
-				}
-			});
+			submit(() -> runOne(Target.of(entry), temp -> installMod(entry, temp), entry.fileName()));
 		}
+
+		for (ModBundle bundle : plan.bundles()) {
+			submit(() -> runOne(Target.of(bundle), temp -> extract(bundle, temp), keyOf(bundle)));
+		}
+	}
+
+	private void submit(Runnable task) {
+		executor.submit(() -> {
+			task.run();
+
+			if (remaining.decrementAndGet() == 0) {
+				complete();
+			}
+		});
 	}
 
 	/** Refusing a host is a decision, not a fault, so it is never worth trying again. */
@@ -142,89 +223,202 @@ public class DownloadSession {
 		}
 	}
 
-	private void runOne(ModEntry entry) {
+	/** What to do with the verified bytes once they are on disk. */
+	@FunctionalInterface
+	private interface Installer {
+		void accept(Path temp) throws Exception;
+	}
+
+	private void runOne(Target target, Installer installer, String key) {
 		int attempts = 1 + Math.max(0, config.downloadRetries);
 
 		for (int attempt = 1; attempt <= attempts; attempt++) {
 			if (cancelled) {
-				setStatus(entry, Status.FAILED, "cancelled");
+				setStatus(key, Status.FAILED, "cancelled");
 				return;
 			}
 
-			setStatus(entry, Status.DOWNLOADING, null);
+			setStatus(key, Status.DOWNLOADING, null);
 
 			try {
-				install(entry);
+				Path temp = partFileFor(target);
+				String sha512 = fetch(target, temp);
+
+				if (!sha512.equalsIgnoreCase(target.sha512())) {
+					// A mismatch means the bytes on disk are wrong, so resuming from them would
+					// only preserve the mistake. Start the next attempt clean.
+					deleteQuietly(temp);
+					throw new IOException("Checksum mismatch");
+				}
+
+				installer.accept(temp);
 				return;
 			} catch (BlockedHostException e) {
-				deleteQuietly(partFileFor(entry));
-				fail(entry, e);
+				deleteQuietly(partFileFor(target));
+				fail(key, e);
 				return;
 			} catch (FileInUseException e) {
 				// The part file stays: the bytes are good, and the next launch can finish
 				// the job without fetching them again.
-				fail(entry, e);
+				fail(key, e);
 				return;
 			} catch (Exception e) {
 				if (attempt == attempts) {
 					// Only now is the partial file worthless: up to here it was the head start
 					// for the next attempt.
-					deleteQuietly(partFileFor(entry));
-					progress.remove(entry.fileName());
-					fail(entry, e);
+					deleteQuietly(partFileFor(target));
+					progress.remove(target.key());
+					fail(key, e);
 					return;
 				}
 
 				AutoModFetcher.LOGGER.warn("Attempt {} of {} for {} failed ({}); retrying",
-						attempt, attempts, entry.fileName(), e.getMessage());
+						attempt, attempts, key, e.getMessage());
 
 				if (!backOff(attempt)) {
-					setStatus(entry, Status.FAILED, "cancelled");
+					setStatus(key, Status.FAILED, "cancelled");
 					return;
 				}
 			}
 		}
 	}
 
-	private void install(ModEntry entry) throws Exception {
-		Path temp = partFileFor(entry);
-		String sha512 = fetch(entry, temp);
+	private void installMod(ModEntry entry, Path temp) throws Exception {
+		move(temp, entry.fileName(), entry.sha512());
+		progress.put(entry.fileName(), entry.size());
+		setStatus(entry.fileName(), Status.DONE, null);
+	}
 
-		if (!sha512.equalsIgnoreCase(entry.sha512())) {
-			// A mismatch means the bytes on disk are wrong, so resuming from them would only
-			// preserve the mistake. Start the next attempt clean.
+	/**
+	 * Unpacks a verified zip into the mods folder.
+	 *
+	 * <p>Entries are looked up by the names the manifest promised, never by walking whatever
+	 * the zip declares it contains. Those names have already been through
+	 * {@link SyncPlanner#isSafeFileName}, so there is no path for a crafted entry name to
+	 * write outside {@code mods/} — the archive's own table of contents is never consulted.
+	 */
+	private void extract(ModBundle bundle, Path zipFile) throws Exception {
+		String bundleKey = keyOf(bundle);
+		setStatus(bundleKey, Status.EXTRACTING, null);
+
+		int installed = 0;
+		int failed = 0;
+
+		try (ZipFile zip = new ZipFile(zipFile.toFile())) {
+			for (BundledMod mod : bundle.contents()) {
+				if (cancelled) {
+					setStatus(mod.fileName(), Status.FAILED, "cancelled");
+					failed++;
+					continue;
+				}
+
+				try {
+					extractOne(zip, mod);
+					installed++;
+				} catch (Exception e) {
+					failed++;
+					fail(mod.fileName(), e);
+				}
+			}
+		}
+
+		deleteQuietly(zipFile);
+
+		AutoModFetcher.LOGGER.info("Unpacked {} of {} mod(s) from the bundle", installed,
+				bundle.contents().size());
+
+		// Never rethrown, however badly this went. The zip arrived and opened, so whatever
+		// stopped a member — a locked jar, a missing entry — will stop it again just as surely
+		// on a second download of the very same bytes. The retry button offers a fresh attempt
+		// if the player wants one; three automatic ones would only be slower.
+		setStatus(bundleKey, failed > 0 ? Status.FAILED : Status.DONE,
+				failed > 0 ? failed + " file(s) could not be installed" : null);
+	}
+
+	private void extractOne(ZipFile zip, BundledMod mod) throws Exception {
+		setStatus(mod.fileName(), Status.EXTRACTING, null);
+
+		ZipEntry entry = zip.getEntry(mod.fileName());
+
+		if (entry == null) {
+			throw new IOException("The bundle does not contain " + mod.fileName());
+		}
+
+		Path temp = ModPaths.downloadTempDir().resolve(mod.fileName() + ".part");
+		MessageDigest digest = MessageDigest.getInstance("SHA-512");
+		long written = 0;
+
+		try (InputStream in = zip.getInputStream(entry);
+				OutputStream out = Files.newOutputStream(temp, StandardOpenOption.CREATE,
+						StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+			byte[] buffer = new byte[BUFFER_SIZE];
+			int read;
+
+			while ((read = in.read(buffer)) != -1) {
+				out.write(buffer, 0, read);
+				digest.update(buffer, 0, read);
+				written += read;
+
+				// The manifest states an exact size, so a member that keeps going is either
+				// wrong or trying to fill the disk. Either way there is nothing to wait for.
+				if (written > mod.size()) {
+					throw new IOException("Entry is larger than the manifest declared");
+				}
+			}
+		} catch (Exception e) {
+			deleteQuietly(temp);
+			throw e;
+		}
+
+		if (written != mod.size()) {
+			deleteQuietly(temp);
+			throw new IOException("Expected " + mod.size() + " bytes but got " + written);
+		}
+
+		String sha512 = Hashing.hex(digest.digest());
+
+		if (!sha512.equalsIgnoreCase(mod.sha512())) {
 			deleteQuietly(temp);
 			throw new IOException("Checksum mismatch");
 		}
 
-		Path target = ModPaths.modsDir().resolve(entry.fileName());
+		move(temp, mod.fileName(), sha512);
+		setStatus(mod.fileName(), Status.DONE, null);
+	}
+
+	/** The last step for every file, however it arrived: staged, verified, then in place. */
+	private void move(Path temp, String fileName, String sha512) throws IOException {
+		Path target = ModPaths.modsDir().resolve(fileName);
 
 		try {
 			Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
 		} catch (IOException e) {
 			if (Files.exists(target)) {
-				throw new FileInUseException(entry.fileName());
+				throw new FileInUseException(fileName);
 			}
 
 			throw e;
 		}
 
 		synchronized (completed) {
-			completed.put(entry.fileName(), sha512.toLowerCase(Locale.ROOT));
+			completed.put(fileName, sha512.toLowerCase(Locale.ROOT));
 		}
 
-		progress.put(entry.fileName(), entry.size());
-		setStatus(entry, Status.DONE, null);
-		AutoModFetcher.LOGGER.info("Installed {}", entry.fileName());
+		AutoModFetcher.LOGGER.info("Installed {}", fileName);
 	}
 
-	private Path partFileFor(ModEntry entry) {
-		return ModPaths.downloadTempDir().resolve(entry.fileName() + ".part");
+	private Path partFileFor(Target target) {
+		// A bundle's key is not a file name, so it is reduced to one that is.
+		String name = target.key().startsWith("bundle:")
+				? target.key().replace(':', '-') + ".zip"
+				: target.key();
+
+		return ModPaths.downloadTempDir().resolve(name + ".part");
 	}
 
-	private void fail(ModEntry entry, Exception cause) {
-		setStatus(entry, Status.FAILED, cause.getMessage() != null ? cause.getMessage() : cause.toString());
-		AutoModFetcher.LOGGER.warn("Failed to download {}", entry.fileName(), cause);
+	private void fail(String key, Exception cause) {
+		setStatus(key, Status.FAILED, cause.getMessage() != null ? cause.getMessage() : cause.toString());
+		AutoModFetcher.LOGGER.warn("Failed to install {}", key, cause);
 	}
 
 	/** @return false if the wait was cut short by a cancel */
@@ -247,15 +441,15 @@ public class DownloadSession {
 	}
 
 	/** Streams one file to disk and returns its SHA-512, computed as it is written. */
-	private String fetch(ModEntry entry, Path temp) throws Exception {
-		String url = entry.url();
+	private String fetch(Target target, Path temp) throws Exception {
+		String url = target.url();
 
 		// Whatever a previous attempt managed to save. Asking for the rest turns a failure at
 		// 90% into a short top-up instead of starting the whole file again.
-		long alreadyHave = partialSize(temp, entry.size());
+		long alreadyHave = partialSize(temp, target.size());
 
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-			if (!config.isAllowed(url)) {
+			if (!policy.isAllowed(url)) {
 				throw new BlockedHostException("Blocked host: " + ClientConfig.hostOf(url));
 			}
 
@@ -285,14 +479,14 @@ public class DownloadSession {
 			}
 
 			if (code == 206) {
-				AutoModFetcher.LOGGER.info("Resuming {} from byte {}", entry.fileName(), alreadyHave);
-				return streamToFile(entry, response.body(), temp, alreadyHave);
+				AutoModFetcher.LOGGER.info("Resuming {} from byte {}", target.key(), alreadyHave);
+				return streamToFile(target, response.body(), temp, alreadyHave);
 			}
 
 			if (code == 200) {
 				// The host ignored the range and is sending the whole thing, so the head start
 				// is worthless and keeping it would corrupt the file.
-				return streamToFile(entry, response.body(), temp, 0);
+				return streamToFile(target, response.body(), temp, 0);
 			}
 
 			response.body().close();
@@ -320,7 +514,7 @@ public class DownloadSession {
 	/**
 	 * @param resumeFrom bytes already on disk to keep and append to; 0 to start the file over
 	 */
-	private String streamToFile(ModEntry entry, InputStream body, Path temp, long resumeFrom) throws Exception {
+	private String streamToFile(Target target, InputStream body, Path temp, long resumeFrom) throws Exception {
 		MessageDigest digest = MessageDigest.getInstance("SHA-512");
 		byte[] buffer = new byte[BUFFER_SIZE];
 		long written = resumeFrom;
@@ -358,17 +552,17 @@ public class DownloadSession {
 				digest.update(buffer, 0, read);
 
 				written += read;
-				progress.put(entry.fileName(), written);
+				progress.put(target.key(), written);
 
 				// The manifest states an exact size, so anything longer is already wrong.
-				if (written > entry.size()) {
+				if (written > target.size()) {
 					throw new IOException("File is larger than the manifest declared");
 				}
 			}
 		}
 
-		if (written != entry.size()) {
-			throw new IOException("Expected " + entry.size() + " bytes but got " + written);
+		if (written != target.size()) {
+			throw new IOException("Expected " + target.size() + " bytes but got " + written);
 		}
 
 		return Hashing.hex(digest.digest());
@@ -444,12 +638,12 @@ public class DownloadSession {
 		state.save();
 	}
 
-	private void setStatus(ModEntry entry, Status status, String reason) {
+	private void setStatus(String key, Status status, String reason) {
 		synchronized (statuses) {
-			statuses.put(entry.fileName(), status);
+			statuses.put(key, status);
 
 			if (reason != null) {
-				failureReasons.put(entry.fileName(), reason);
+				failureReasons.put(key, reason);
 			}
 		}
 	}
@@ -498,15 +692,15 @@ public class DownloadSession {
 		return plan.totalDownloadBytes();
 	}
 
-	public Status statusOf(String fileName) {
+	public Status statusOf(String key) {
 		synchronized (statuses) {
-			return statuses.getOrDefault(fileName, Status.PENDING);
+			return statuses.getOrDefault(key, Status.PENDING);
 		}
 	}
 
-	public String failureReasonOf(String fileName) {
+	public String failureReasonOf(String key) {
 		synchronized (statuses) {
-			return failureReasons.get(fileName);
+			return failureReasons.get(key);
 		}
 	}
 
@@ -518,7 +712,12 @@ public class DownloadSession {
 
 	public int failureCount() {
 		synchronized (statuses) {
-			return (int) statuses.values().stream().filter(status -> status == Status.FAILED).count();
+			// Bundle rows mirror their members, so counting them too would report one failure
+			// as two.
+			return (int) statuses.entrySet().stream()
+					.filter(entry -> !entry.getKey().startsWith("bundle:"))
+					.filter(entry -> entry.getValue() == Status.FAILED)
+					.count();
 		}
 	}
 
@@ -530,22 +729,43 @@ public class DownloadSession {
 		return config;
 	}
 
+	public SourcePolicy policy() {
+		return policy;
+	}
+
 	/** Anything that did not finish, whether it failed or was never reached. */
 	public boolean hasUnfinishedWork() {
-		return !remainingWork().downloads().isEmpty();
+		SyncPlan left = remainingWork();
+		return !left.downloads().isEmpty() || !left.bundles().isEmpty();
 	}
 
 	/**
 	 * What is left to do, as a plan a fresh session can run.
 	 *
 	 * <p>Files already installed are dropped so a retry does not fetch them twice. Removals
-	 * are carried over because a cancelled session never queued them.
+	 * are carried over because a cancelled session never queued them. Consent is not: the
+	 * player granted those hosts to get here, and asking again on a retry would punish them
+	 * for a flaky connection.
 	 */
 	public SyncPlan remainingWork() {
 		List<ModEntry> unfinished = plan.downloads().stream()
 				.filter(entry -> statusOf(entry.fileName()) != Status.DONE)
 				.toList();
 
-		return new SyncPlan(unfinished, List.of(), plan.deletions(), List.of());
+		// A bundle is worth fetching again only for the members that are still missing.
+		List<ModBundle> bundles = new ArrayList<>();
+
+		for (ModBundle bundle : plan.bundles()) {
+			List<BundledMod> missing = bundle.contents().stream()
+					.filter(mod -> statusOf(mod.fileName()) != Status.DONE)
+					.toList();
+
+			if (!missing.isEmpty()) {
+				bundles.add(new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), missing));
+			}
+		}
+
+		return new SyncPlan(unfinished, List.copyOf(bundles), List.of(), plan.deletions(), List.of(),
+				List.of());
 	}
 }

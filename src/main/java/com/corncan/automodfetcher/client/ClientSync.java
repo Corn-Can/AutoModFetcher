@@ -37,7 +37,9 @@ public final class ClientSync {
 	 */
 	public static boolean decide(ModManifest manifest) {
 		try {
-			SyncPlan plan = SyncPlanner.plan(manifest, config, ClientModIndex.get(), InstalledState.load());
+			SourcePolicy policy = SourcePolicy.forServer(config, ClientSession.serverKey());
+			SyncPlan plan = SyncPlanner.plan(manifest, config, policy, ClientModIndex.get(),
+					InstalledState.load());
 
 			if (plan.isEmpty()) {
 				AutoModFetcher.LOGGER.info("Mods already match the server, joining normally");
@@ -56,9 +58,10 @@ public final class ClientSync {
 				return false;
 			}
 
-			AutoModFetcher.LOGGER.info("Mod sync needed: {} to download, {} blocked, {} to remove, {} manual",
-					plan.downloads().size(), plan.blocked().size(), plan.deletions().size(),
-					plan.manual().size());
+			AutoModFetcher.LOGGER.info(
+					"Mod sync needed: {} to download, {} bundle(s), {} blocked, {} to remove, {} manual",
+					plan.downloads().size(), plan.bundles().size(), plan.blocked().size(),
+					plan.deletions().size(), plan.manual().size());
 
 			boolean automatic = plan.isFullyAutomatic()
 					&& TrustedServers.load().isTrusted(ClientSession.serverKey());
@@ -70,8 +73,8 @@ public final class ClientSync {
 			// Queue the screen before answering, so it is already waiting when the server ends
 			// the connection in response.
 			Minecraft.getInstance().execute(() -> ClientScreenQueue.show(automatic
-					? startInstall(plan)
-					: new ModSyncConfirmScreen(plan, config)));
+					? startInstall(plan, policy)
+					: new ModSyncConfirmScreen(plan, config, policy)));
 
 			return true;
 		} catch (Throwable e) {
@@ -81,9 +84,9 @@ public final class ClientSync {
 	}
 
 	/** Straight to the progress screen: the player already answered this question once. */
-	private static Screen startInstall(SyncPlan plan) {
-		DownloadSession session = new DownloadSession(plan, config);
+	private static Screen startInstall(SyncPlan plan, SourcePolicy policy) {
+		DownloadSession session = new DownloadSession(plan, config, policy);
 		session.start();
-		return new ModSyncProgressScreen(session, plan.downloads());
+		return new ModSyncProgressScreen(session);
 	}
 }

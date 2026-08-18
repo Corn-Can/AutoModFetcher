@@ -14,6 +14,9 @@ When you connect. The server tells your game which mods it runs. AutoModFetcher 
 🛡️ **Secure by Default:**
 Downloads only come from trusted sources (Modrinth & CurseForge) via HTTPS. Every file is strictly verified against a SHA hash. Mismatched files are discarded.
 
+🔍 **Anywhere Else, You Decide:**
+If a server hosts a mod itself, you are shown the site and the exact files before anything is downloaded. Agreeing applies to that one server only — no other server gains access to it.
+
 🗂️ **Your Own Mods Are Safe:**
 The cleanup system only manages files installed by AutoModFetcher. Your client-side mods remain completely untouched.
 
@@ -33,10 +36,13 @@ If a mod cannot be downloaded automatically, you get a clickable link to its off
 Mods are matched against Modrinth by hash, then by name and version. Even if you downloaded a `.jar` from CurseForge, AutoModFetcher will resolve it. 
 (A CurseForge API key is optional, needed only for exclusive mods)
 
-⚖️ **100% Legal & Respectful:**
-Nothing is rehosted. The manifest only sends secure URLs to the clients. Your server never illegally redistributes files.
+⚖️ **Respectful by Design:**
+Other people's mods are never rehosted — the manifest only sends secure platform URLs. If an author disables third-party downloads, that is honoured, and no bundle can include their file.
 
-📦 **One-Command Modpacks:**
+📦 **Ship Your Own Mods:**
+`/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of — into a single zip. Upload it anywhere, paste the link, and players get it automatically. `/automodfetcher bundle verify` checks what they will actually receive.
+
+🗃️ **One-Command Modpacks:**
 Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and CurseForge zip formats.
 
 🔄 **Hot-Reload Manifest:**
@@ -53,13 +59,9 @@ Use `/automodfetcher reload` to rebuild the manifest without restarting the serv
 
 ## 📋 Requirements & Important Notes
 
-*   **Supported:** Minecraft **1.20.1** (Fabric, Forge) and **1.21.1** (Fabric, NeoForge)
-*   **Requirements:** the matching loader. On Fabric you also need **Fabric API**; Forge and NeoForge need nothing extra.
-*   **Installation:** Must be installed on **both** the Server and the Client. Works on dedicated servers and on worlds opened to LAN — including Essential's "invite friends" — since those are the same thing from a joining player's side.
-*   **Hosting Your Own World:** Your mods folder is yours, not a server's. When you open a world, the chat tells you how many mods will be offered to anyone who joins, and `excludeFileNames` keeps the rest to yourself.
+*   **Installation:** Must be installed on **both** the Server and the Client.
 *   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code.
-*   **"Restart Now" is Fabric-only:** Forge and NeoForge do not keep the arguments the game was started with, so the command cannot be rebuilt. You get "Quit" there instead of a button that would not work.
-*   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that. Players will receive a direct link to download it manually.
+*   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that — such mods are excluded from bundles, and players receive a direct link to that exact file version instead.
 *   **File Deletion:** Removed mods are deleted on the *next* launch, as Java locks running `.jar` files.
 ---
 > **Licence:** All Rights Reserved. Free to use (including on commercial servers) and free to include in modpacks/server packs with credit. Standalone redistribution is not permitted.

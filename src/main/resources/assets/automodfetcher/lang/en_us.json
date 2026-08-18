@@ -12,8 +12,6 @@
 	"automodfetcher.confirm.section.manual": "Install these yourself (%s):",
 	"automodfetcher.confirm.open_page": "    Open %s",
 	"automodfetcher.confirm.section.remove": "Will be removed on the next launch (%s):",
-	"automodfetcher.confirm.blocked_hint": "  Add the host to allowedDomains in %s if you trust it.",
-	"automodfetcher.blocked.domain": "    Host %s is not on your allow list",
 	"automodfetcher.blocked.file_name": "    The server sent an unsafe file name",
 	"automodfetcher.progress.title": "Downloading mods",
 	"automodfetcher.progress.cancel": "Cancel",
@@ -45,5 +43,15 @@
 	"automodfetcher.command.reloading": "Rebuilding the mod list...",
 	"automodfetcher.progress.rate": "%s/s — about %s left",
 	"automodfetcher.host.sharing": "AutoModFetcher: your %s mod(s) will be offered to anyone who joins this world.",
-	"automodfetcher.host.exclude_hint": "To keep some of them to yourself, add the file names to excludeFileNames in %s."
+	"automodfetcher.host.exclude_hint": "To keep some of them to yourself, add the file names to excludeFileNames in %s.",
+	"automodfetcher.confirm.section.untrusted": "This server uses a source outside Modrinth and CurseForge:",
+	"automodfetcher.confirm.untrusted_host": "    %s",
+	"automodfetcher.confirm.untrusted_warning": "  Only continue if you trust whoever runs this server.",
+	"automodfetcher.confirm.accept_untrusted": "I understand — install",
+	"automodfetcher.confirm.section.bundle": "%s file(s) will be unpacked from a bundle on %s:",
+	"automodfetcher.confirm.bundle_detail": "    One %s download",
+	"automodfetcher.blocked.insecure": "    Sent over plain http, which cannot be trusted",
+	"automodfetcher.progress.entry.extracting": "  %s  unpacking",
+	"automodfetcher.command.bundling": "Packing the mods no platform carries...",
+	"automodfetcher.command.bundle_verifying": "Checking the published bundle..."
 }

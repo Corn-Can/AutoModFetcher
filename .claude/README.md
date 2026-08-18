@@ -56,11 +56,17 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
     若回傳 `downloadUrl` 為 `null`（作者關閉第三方下載），一律視為「無法解析」，**不會**自行拼 CDN 網址繞過。
 *   **快取:** `resolve-cache.json` 以 SHA-1 為 key；未命中也會快取 24 小時，避免每次開服重打 API。
 *   清單只在**伺服器啟動時於背景執行緒建構一次**，之後每位玩家連線直接送快取結果。
+*   **兩個平台都查不到的檔案**（`unresolved` 且無 `pageUrl`）可由 `/automodfetcher bundle` 打包成
+    一個 zip，管理員自行上傳，網址填 `bundleUrl`。`ManifestBuilder.attachBundle()` 會把這些檔案
+    從 `unresolved` 移出、改掛在 `ModBundle` 上。作者關閉第三方下載的（有 `pageUrl`）**永遠不入包**。
 
 ### 4. 異步下載層 (Concurrency)
 *   `java.net.http.HttpClient` + 固定大小 daemon 執行緒池（預設 3 條）。
 *   **重導向手動跟隨**（最多 5 跳），每一跳都重新檢查網域白名單——否則白名單可被一個 302 繞過。
 *   先寫入 `mods/.automodfetcher-tmp/`，SHA-512 與檔案大小都吻合才搬進 `mods/`。
+*   jar 與 bundle zip 共用同一條抓取路徑（`DownloadSession.Target`），所以白名單逐跳檢查、
+    `Range` 續傳、串流雜湊都只有一份實作。zip 整包驗過才打開，解壓時**用 manifest 上的檔名去
+    `ZipFile.getEntry()`**，不走 zip 自己宣告的目錄——路徑穿越因此沒有入口。
 
 ### 5. 使用者介面層 (GUI / Screen)
 三個原版 `Screen`（無 mixin）：確認 → 進度 → 完成。確認畫面會逐檔列出**檔名、大小、來源網域**。
@@ -69,7 +75,7 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
 
 ## 🔒 安全模型
 
-這個機制本質上是「讓伺服器把程式碼放進玩家的 mods 資料夾」，所以預設有四道防線：
+這個機制本質上是「讓伺服器把程式碼放進玩家的 mods 資料夾」，所以預設有五道防線：
 
 1. **網域白名單** — 預設只信任 `cdn.modrinth.com` / `edge.forgecdn.net` / `mediafilez.forgecdn.net`。
 2. **強制 HTTPS**（`allowInsecureHttp` 預設 false）。
@@ -77,6 +83,15 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
    唯一例外是上面說的 rebuild 情況（CF 打包 → Modrinth 等價建置），此時驗證改用 Modrinth 公布的雜湊。
    兩種情況都強制檔案大小相符，並在超過宣告大小時中止串流。
 4. **檔名消毒** — 拒絕含 `/`、`\`、`..`、`:` 或非 `.jar` 的檔名，避免伺服器用檔名跳出 mods 資料夾。
+5. **逐伺服器的來源授權** — 白名單以外的網域不再靜默封鎖，而是在確認畫面上明確標示網站與檔案，
+   由玩家決定。同意後只寫進 `trusted-sources.json` 的**該伺服器**條目，
+   **絕不寫回 `allowedDomains`**（那會讓每一個伺服器都能用那個網站）。
+   換了 host 就重新詢問，因為那是另一個問題。
+
+第 5 道的邊界要說清楚：`SourcePolicy.needsConsent()` 會先過 scheme 檢查，所以**明文 http 不是可以
+同意的事**——沒有任何答案能讓「路徑上的人可以換掉 jar」變得安全。同意能放寬的只有「是誰在提供」，
+放寬不了「怎麼傳過來」。`TrustedSources` 也刻意與 `TrustedServers`（不再詢問）分開：
+信任一個伺服器安裝模組，跟信任它指名的網站，是兩件事，一個答案不能替另一個作答。
 
 另外，**刪除只針對本模組自己安裝過的檔案**（記錄在 `installed.json`）。玩家自行安裝的 Sodium、Iris 等永遠不會被碰。
 
@@ -103,7 +118,9 @@ src/main/
     AutoModFetcherClient.java       client 入口
     PendingOps.java                 待處理檔案操作的資料模型
     PendingOpsApplier.java          preLaunch entrypoint，下次啟動時執行刪除
-    network/                        Channels / ModEntry / ModSide / ModManifest（手寫 FriendlyByteBuf 序列化）
+    network/                        Channels / ModEntry / ModSide / ModManifest / ModBundle / BundledMod
+                                    （手寫 FriendlyByteBuf 序列化；bundles 寫在最後並以 readableBytes 守衛，
+                                     這是兩端唯一能各自升級的地方）
     util/                           Hashing(SHA-1,SHA-512,Murmur2) / JarMetadata / Json / ModPaths
     server/
       ServerSyncConfig.java         server.json
@@ -111,8 +128,13 @@ src/main/
       ManifestBuilder.java          串起掃描與解析
       ServerNetworking.java         QUERY_START 送出清單、收到回覆後負責斷線
       resolver/                     ModrinthResolver / CurseForgeResolver / ResolveCache / Resolution
+      export/                       MrpackExporter / CurseForgePackExporter
+                                    BundleBuilder（打包無平台收錄的模組，固定時間戳以確保可重現）
+                                    BundleVerifier（抓一次 bundleUrl，確認玩家拿到的就是這份）
     client/
       ClientConfig.java             client.json（白名單等）
+      SourcePolicy.java             這次連線可以從哪裡下載＝白名單 ∪ 本伺服器已獲授權的 host
+      TrustedSources.java           trusted-sources.json（伺服器 → 已授權 host）
       ClientModIndex.java           啟動時背景建立本地雜湊索引
       SyncPlanner.java / SyncPlan   差異計算
       DownloadSession.java          下載、驗證、安裝
@@ -154,7 +176,9 @@ src/main/
 }
 ```
 
-其他自動產生的檔案：`resolve-cache.json`（伺服器）、`local-index.json` / `installed.json` / `pending-ops.json`（客戶端）。
+其他自動產生的檔案：`resolve-cache.json`、`bundle/mods-bundle.zip`（伺服器）、
+`local-index.json` / `installed.json` / `pending-ops.json` / `trusted-servers.json` /
+`trusted-sources.json` / `skipped-servers.json`（客戶端）。
 
 ---
 

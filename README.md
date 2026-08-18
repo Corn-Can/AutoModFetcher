@@ -155,7 +155,8 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
   兩個平台各自打包同一個版本，位元組不同，所以雜湊查不到。這一層改用模組 ID 加版本號比對，
   找到同一個版本的 Modrinth 建置。玩家因此拿到功能等價、但非伺服器那份位元組的檔案，log 會標示出來。
 - **CurseForge** 需要你自備 API key，用 Murmur2 指紋查詢。只有「僅在 CF 上架」的模組才會走到這裡。
-- 都查不到的檔案會在 log 列出，並在玩家端顯示為「請自行安裝」
+- 都查不到的檔案會在 log 列出。你可以用 `/automodfetcher bundle` 把它們打包分發（見下節），
+  否則會在玩家端顯示為「請自行安裝」
 
 實務上這表示：**大多數情況你不需要 CurseForge API key**，就算模組是從 CF 下載的也一樣，
 只要它同時有上架 Modrinth。
@@ -172,6 +173,7 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
   "manualUrls": {
     "my-private-mod-1.0.jar": "https://example.com/my-private-mod-1.0.jar"
   },
+  "bundleUrl": "",
   "includeServerOnlyMods": false,
   "includeSelf": false,
   "packName": "Server Modpack",
@@ -187,6 +189,7 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 | `curseforgeApiKey` | 只在有模組不在 Modrinth 上、或要匯出 CF 整合包時才需要 |
 | `excludeFileNames` | 不要通知客戶端的檔案，支援結尾 `*` 萬用字元 |
 | `manualUrls` | 兩個平台都查不到時，自己指定下載網址（key 是完整檔名）。**必須提供與伺服器上位元組完全相同的檔案**，否則客戶端驗證會失敗 |
+| `bundleUrl` | `/automodfetcher bundle` 打包出來的 zip 上傳後的**直接下載**網址。留空則不啟用。`manualUrls` 優先於它 |
 | `includeServerOnlyMods` | 純伺服器端模組客戶端不需要，預設不送 |
 | `includeSelf` | 預設 false，避免要求客戶端替換正在執行中的自己。不影響整合包匯出 |
 | `packName` / `packVersion` | 匯出整合包時顯示的名稱與版本 |
@@ -194,6 +197,53 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 | `curseforgeLookupLimit` | 匯出 CF 包時，最多用名稱查詢幾個模組。每個花 2 次 API 請求，CF 未公開速率上限，所以設了保護 |
 
 模組的 `environment` 欄位會被讀取，標記為 `server` 的不會出現在客戶端清單裡。
+
+### 分發自製模組：`/automodfetcher bundle`
+
+自己寫的模組、私下建置的版本、已經從平台下架的舊版——這些兩個平台都查不到，
+以前只能請玩家自己想辦法。現在可以打包成一個 zip 讓你自己上傳。
+
+```
+/automodfetcher bundle          打包，並印出路徑與 SHA-512
+/automodfetcher bundle verify   抓一次你上傳的檔案，確認玩家拿到的就是這一份
+```
+
+流程：
+
+1. `/automodfetcher bundle`。它只會裝進**兩個平台都查不到**的檔案，
+   輸出到 `config/automodfetcher/bundle/mods-bundle.zip`。
+2. 把那個 zip 上傳到任何地方，取得一個**直接下載連結**。
+3. 網址填進 `server.json` 的 `bundleUrl`，然後 `/automodfetcher reload`。
+4. `/automodfetcher bundle verify` 確認上傳的那份跟伺服器上的完全一致。
+
+玩家那邊會看到一個明確的授權畫面，標示這些檔案來自 Modrinth / CurseForge 以外的來源，
+以及是哪個網站。同意之後，**只有這個伺服器**能從那個網站下載——不會影響他們連別的伺服器。
+zip 整包先驗 SHA-512，解壓後每個 jar 再驗一次。
+
+#### 必須是直接下載連結
+
+分享頁面不行。`bundle verify` 會替你抓出這類問題，但先知道總比事後好：
+
+| 可以 | 不行 |
+|---|---|
+| GitHub Releases 的附件網址 | GitHub 的 `/blob/` 檢視頁 |
+| Dropbox 加上 `?dl=1` | Dropbox 預設的分享連結 |
+| 自己的網頁空間 / 物件儲存 | Google Drive 的 `/view` 頁 |
+| | MEGA、MediaFire 這類需要先過一層頁面的空間 |
+
+#### 什麼不會被打包
+
+**作者關閉第三方下載的模組不會進去**，即使它們同樣「無法自動下載」。
+那個設定就是作者說不要，自行轉載正是他們拒絕的那件事。這些模組玩家仍然會拿到連結，
+而且是指向**該版本的下載頁**而不是專案首頁。指令執行完會列出被略過的檔案。
+
+已經在 Modrinth 或 CurseForge 上的模組也不會進去——它們照舊走官方 CDN。
+
+#### 換了模組要重打包
+
+zip 是照打包當下的 `mods/` 內容做的。之後你增刪模組，要重新 `bundle`、重新上傳。
+沒重新上傳的話，客戶端的雜湊比對會失敗（這是對的，它不會裝來路不明的位元組），
+但玩家看到的只是一個看不懂的錯誤——所以請養成 `bundle verify` 的習慣。
 
 ### 換模組之後要重啟伺服器
 

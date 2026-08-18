@@ -86,8 +86,8 @@ public final class ClientNetworking {
 		ModManifest manifest = ModManifest.read(buf);
 		rememberServer(handler);
 
-		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved",
-				manifest.entries().size(), manifest.unresolved().size());
+		AutoModFetcher.LOGGER.info("Server advertised {} mod file(s), {} unresolved, {} bundle(s)",
+				manifest.entries().size(), manifest.unresolved().size(), manifest.bundles().size());
 
 		// Returning an unfinished future holds the login open until we have decided, which is
 		// exactly the window we need to compare against the local mods folder. Fabric answers

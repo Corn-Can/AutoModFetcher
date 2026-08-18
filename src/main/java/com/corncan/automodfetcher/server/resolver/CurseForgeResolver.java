@@ -250,6 +250,7 @@ public final class CurseForgeResolver {
 
 		Map<String, Resolution> resolved = new HashMap<>();
 		Map<String, Integer> blockedModIds = new LinkedHashMap<>();
+		Map<String, Integer> blockedFileIds = new LinkedHashMap<>();
 
 		try {
 			JsonObject body = new JsonObject();
@@ -266,13 +267,13 @@ public final class CurseForgeResolver {
 				return Result.empty();
 			}
 
-			readExactMatches(response.body(), fingerprintToSha1, resolved, blockedModIds);
+			readExactMatches(response.body(), fingerprintToSha1, resolved, blockedModIds, blockedFileIds);
 		} catch (Exception e) {
 			AutoModFetcher.LOGGER.warn("CurseForge lookup failed for {} file(s)", fingerprintToSha1.size(), e);
 			return new Result(resolved, Map.of());
 		}
 
-		return new Result(resolved, lookUpPages(http, apiKey, blockedModIds));
+		return new Result(resolved, lookUpPages(http, apiKey, blockedModIds, blockedFileIds));
 	}
 
 	private static HttpRequest post(URI uri, String apiKey, JsonObject body) {
@@ -287,7 +288,8 @@ public final class CurseForgeResolver {
 	}
 
 	private static void readExactMatches(String responseBody, Map<Long, String> fingerprintToSha1,
-			Map<String, Resolution> resolved, Map<String, Integer> blockedModIds) {
+			Map<String, Resolution> resolved, Map<String, Integer> blockedModIds,
+			Map<String, Integer> blockedFileIds) {
 		JsonObject json = Json.GSON.fromJson(responseBody, JsonObject.class);
 
 		if (json == null || !json.has("data") || !json.get("data").isJsonObject()) {
@@ -329,6 +331,12 @@ public final class CurseForgeResolver {
 					blockedModIds.put(sha1, file.get("modId").getAsInt());
 				}
 
+				// The file's own id, so the link can land on this exact version rather than a
+				// project page the player then has to search through for the right build.
+				if (file.has("id")) {
+					blockedFileIds.put(sha1, file.get("id").getAsInt());
+				}
+
 				continue;
 			}
 
@@ -336,9 +344,17 @@ public final class CurseForgeResolver {
 		}
 	}
 
-	/** One batch call turns the blocked matches' project ids into pages players can open. */
+	/**
+	 * One batch call turns the blocked matches' project ids into pages players can open.
+	 *
+	 * <p>Deepened to the file where the id is known. Sending someone to a project's front page
+	 * leaves them picking a version out of a list, which is exactly where a player installs the
+	 * wrong build and cannot work out why they are still being turned away. Pointing at the
+	 * file is still only pointing — the author disabled third-party downloads, and nothing here
+	 * fetches anything on their behalf.
+	 */
 	private static Map<String, String> lookUpPages(HttpClient http, String apiKey,
-			Map<String, Integer> blockedModIds) {
+			Map<String, Integer> blockedModIds, Map<String, Integer> blockedFileIds) {
 		if (blockedModIds.isEmpty()) {
 			return Map.of();
 		}
@@ -390,9 +406,15 @@ public final class CurseForgeResolver {
 			blockedModIds.forEach((sha1, modId) -> {
 				String site = siteByModId.get(modId);
 
-				if (site != null) {
-					pages.put(sha1, site);
+				if (site == null) {
+					return;
 				}
+
+				Integer fileId = blockedFileIds.get(sha1);
+
+				pages.put(sha1, fileId != null
+						? site.replaceAll("/+$", "") + "/files/" + fileId
+						: site);
 			});
 		} catch (Exception e) {
 			AutoModFetcher.LOGGER.debug("Could not look up CurseForge project pages", e);

@@ -2,11 +2,15 @@ package com.corncan.automodfetcher.client;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import com.corncan.automodfetcher.AutoModFetcher;
+import com.corncan.automodfetcher.network.BundledMod;
 import com.corncan.automodfetcher.network.ManualEntry;
+import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 
@@ -14,11 +18,14 @@ public final class SyncPlanner {
 	private SyncPlanner() {
 	}
 
-	public static SyncPlan plan(ModManifest manifest, ClientConfig config, ClientModIndex.Index index,
-			InstalledState installed) {
+	public static SyncPlan plan(ModManifest manifest, ClientConfig config, SourcePolicy policy,
+			ClientModIndex.Index index, InstalledState installed) {
 		List<ModEntry> downloads = new ArrayList<>();
 		List<SyncPlan.Blocked> blocked = new ArrayList<>();
 		Set<String> manifestHashes = new HashSet<>();
+
+		// Insertion-ordered so the confirm screen names hosts in the order they appear.
+		Set<String> needConsent = new LinkedHashSet<>();
 
 		for (ModEntry entry : manifest.entries()) {
 			String sha512 = entry.sha512().toLowerCase(Locale.ROOT);
@@ -46,13 +53,22 @@ public final class SyncPlanner {
 				continue;
 			}
 
-			if (!config.isAllowed(entry.url())) {
-				blocked.add(new SyncPlan.Blocked(entry, SyncPlan.Blocked.REASON_DOMAIN));
+			// Plain HTTP is refused outright rather than offered as a choice: the hash is the
+			// only thing standing between the player and a swapped jar, and consent cannot add
+			// a second one.
+			if (!config.isSchemeAllowed(entry.url())) {
+				blocked.add(new SyncPlan.Blocked(entry, SyncPlan.Blocked.REASON_INSECURE));
 				continue;
+			}
+
+			if (policy.needsConsent(entry.url())) {
+				needConsent.add(ClientConfig.hostOf(entry.url()));
 			}
 
 			downloads.add(entry);
 		}
+
+		List<ModBundle> bundles = planBundles(manifest, config, policy, index, manifestHashes, needConsent);
 
 		List<String> deletions = config.deleteRemovedMods
 				? installed.staleFileNames(manifestHashes)
@@ -61,6 +77,7 @@ public final class SyncPlanner {
 		// A file we are about to re-download under the same name is a replacement, not a removal.
 		Set<String> incoming = new HashSet<>();
 		downloads.forEach(entry -> incoming.add(entry.fileName()));
+		bundles.forEach(bundle -> bundle.contents().forEach(mod -> incoming.add(mod.fileName())));
 		deletions = deletions.stream().filter(name -> !incoming.contains(name)).toList();
 
 		// Hash first: a browser renames a duplicate download to "mod (1).jar", and the player
@@ -70,7 +87,64 @@ public final class SyncPlanner {
 				.filter(entry -> !hasLocally(entry, index))
 				.toList();
 
-		return new SyncPlan(List.copyOf(downloads), List.copyOf(blocked), List.copyOf(deletions), manual);
+		return new SyncPlan(List.copyOf(downloads), bundles, List.copyOf(blocked), deletions, manual,
+				List.copyOf(needConsent));
+	}
+
+	/**
+	 * Decides which operator-hosted zips are worth fetching, and what to take out of them.
+	 *
+	 * <p>A bundle is all-or-nothing to download but not to unpack: it is fetched when even one
+	 * member is missing, and skipped entirely once the player has them all. Members they
+	 * already have are dropped from the list rather than reinstalled — on Windows those jars
+	 * are open right now, so writing over them would fail and report a problem where there
+	 * isn't one.
+	 */
+	private static List<ModBundle> planBundles(ModManifest manifest, ClientConfig config,
+			SourcePolicy policy, ClientModIndex.Index index, Set<String> manifestHashes,
+			Set<String> needConsent) {
+		List<ModBundle> wanted = new ArrayList<>();
+
+		for (ModBundle bundle : manifest.bundles()) {
+			List<BundledMod> missing = new ArrayList<>();
+
+			for (BundledMod mod : bundle.contents()) {
+				String sha512 = mod.sha512().toLowerCase(Locale.ROOT);
+
+				// Bundled files count as required just like any other entry. Leaving them out
+				// would let deleteRemovedMods treat last session's install as stale and remove
+				// it, only for the next join to fetch the whole zip again.
+				manifestHashes.add(sha512);
+
+				if (!mod.side().requiredOnClient() || !isSafeFileName(mod.fileName())) {
+					continue;
+				}
+
+				if (!index.sha512Hashes().contains(sha512)) {
+					missing.add(mod);
+				}
+			}
+
+			if (missing.isEmpty()) {
+				continue;
+			}
+
+			if (!config.isSchemeAllowed(bundle.url())) {
+				// Nothing to ask the player here: no answer makes plain http safe to install
+				// from, and the hash is the only guard a swapped jar would have to beat.
+				AutoModFetcher.LOGGER.warn("Refusing the mod bundle at {}: downloads must use https",
+						bundle.url());
+				continue;
+			}
+
+			if (policy.needsConsent(bundle.url())) {
+				needConsent.add(ClientConfig.hostOf(bundle.url()));
+			}
+
+			wanted.add(new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), List.copyOf(missing)));
+		}
+
+		return List.copyOf(wanted);
 	}
 
 	private static boolean hasLocally(ManualEntry entry, ClientModIndex.Index index) {
@@ -84,6 +158,9 @@ public final class SyncPlanner {
 	/**
 	 * The file name comes straight off the wire, so it must not be able to point anywhere
 	 * except at a jar directly inside the mods folder.
+	 *
+	 * <p>Also what a bundle's members are looked up by, which is why extraction never has to
+	 * trust the names a zip declares for itself.
 	 */
 	static boolean isSafeFileName(String fileName) {
 		if (fileName == null || fileName.isBlank()) {
