@@ -53,5 +53,11 @@
 	"automodfetcher.blocked.insecure": "    Sent over plain http, which cannot be trusted",
 	"automodfetcher.progress.entry.extracting": "  %s  unpacking",
 	"automodfetcher.command.bundling": "Packing the mods no platform carries...",
-	"automodfetcher.command.bundle_verifying": "Checking the published bundle..."
+	"automodfetcher.command.bundle_verifying": "Checking the published bundle...",
+	"automodfetcher.confirm.section.foreign": "This server does not run these (%s):",
+	"automodfetcher.confirm.foreign_hint": "  They will be moved to %s, next to your mods folder. Nothing is deleted.",
+	"automodfetcher.complete.disabled": "%s mod(s) will be moved out on the next launch",
+	"automodfetcher.restart.title": "One more restart",
+	"automodfetcher.restart.body": "Your mods folder is ready, but this session is still running the old ones.",
+	"automodfetcher.restart.why": "Mods are only read at launch, so restart once more before joining."
 }

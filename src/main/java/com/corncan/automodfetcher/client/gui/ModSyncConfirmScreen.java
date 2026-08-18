@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import com.corncan.automodfetcher.PendingOpsApplier;
 import com.corncan.automodfetcher.client.ClientConfig;
 import com.corncan.automodfetcher.client.ClientSession;
 import com.corncan.automodfetcher.client.DownloadSession;
@@ -214,6 +215,22 @@ public class ModSyncConfirmScreen extends Screen {
 				}
 			}
 
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		if (!plan.foreign().isEmpty()) {
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.section.foreign", plan.foreign().size()),
+					LineList.Line.YELLOW));
+
+			for (String fileName : plan.foreign()) {
+				lines.add(LineList.Line.of(Component.literal("  " + fileName), LineList.Line.YELLOW));
+			}
+
+			// Says where they go, because "we will move your mods" is only acceptable if the
+			// player can see it is reversible before they agree to it.
+			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.foreign_hint",
+					PendingOpsApplier.disabledDir().getFileName().toString()), LineList.Line.GREY));
 			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 		}
 

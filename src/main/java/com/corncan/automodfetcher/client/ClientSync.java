@@ -1,8 +1,10 @@
 package com.corncan.automodfetcher.client;
 
 import com.corncan.automodfetcher.AutoModFetcher;
+import com.corncan.automodfetcher.PendingOpsApplier;
 import com.corncan.automodfetcher.client.gui.ModSyncConfirmScreen;
 import com.corncan.automodfetcher.client.gui.ModSyncProgressScreen;
+import com.corncan.automodfetcher.client.gui.ModSyncRestartScreen;
 import com.corncan.automodfetcher.network.ModManifest;
 
 import net.minecraft.client.Minecraft;
@@ -37,6 +39,20 @@ public final class ClientSync {
 	 */
 	public static boolean decide(ModManifest manifest) {
 		try {
+			// This launch removed or set aside a jar, and every loader had already resolved the
+			// mods folder before it got the chance — so the file is gone from disk and still
+			// loaded here. Comparing the folder against the server would say everything matches,
+			// which is true of the disk and false of the game the player is sitting in front of.
+			// They would join and be dropped a second later, over a mod they already fixed.
+			if (PendingOpsApplier.changedThisLaunch()) {
+				AutoModFetcher.LOGGER.info("Mods changed during this launch but are still loaded; "
+						+ "asking for one more restart before joining");
+				ClientSession.rememberDiagnosis(null);
+				Minecraft.getInstance().execute(() ->
+						ClientScreenQueue.show(new ModSyncRestartScreen()));
+				return true;
+			}
+
 			SourcePolicy policy = SourcePolicy.forServer(config, ClientSession.serverKey());
 			SyncPlan plan = SyncPlanner.plan(manifest, config, policy, ClientModIndex.get(),
 					InstalledState.load());
@@ -59,9 +75,10 @@ public final class ClientSync {
 			}
 
 			AutoModFetcher.LOGGER.info(
-					"Mod sync needed: {} to download, {} bundle(s), {} blocked, {} to remove, {} manual",
+					"Mod sync needed: {} to download, {} bundle(s), {} blocked, {} to remove, "
+							+ "{} manual, {} not on this server",
 					plan.downloads().size(), plan.bundles().size(), plan.blocked().size(),
-					plan.deletions().size(), plan.manual().size());
+					plan.deletions().size(), plan.manual().size(), plan.foreign().size());
 
 			boolean automatic = plan.isFullyAutomatic()
 					&& TrustedServers.load().isTrusted(ClientSession.serverKey());

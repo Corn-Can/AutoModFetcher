@@ -93,7 +93,40 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
 放寬不了「怎麼傳過來」。`TrustedSources` 也刻意與 `TrustedServers`（不再詢問）分開：
 信任一個伺服器安裝模組，跟信任它指名的網站，是兩件事，一個答案不能替另一個作答。
 
-另外，**刪除只針對本模組自己安裝過的檔案**（記錄在 `installed.json`）。玩家自行安裝的 Sodium、Iris 等永遠不會被碰。
+另外，**刪除只針對本模組自己安裝過的檔案**（記錄在 `installed.json`）。玩家自行安裝的模組永遠不會被刪除。
+
+那條界線也劃出了一個真實的破口：伺服器換掉一個玩家當初手動裝的模組時，AMF 從頭到尾一句話都不會說。
+所以另外有一條「多餘模組」的路徑（見下節），它**搬走而不刪除**，而且要玩家在確認畫面上按下同意。
+
+### 🧹 多餘模組（`SyncPlanner.findForeign`）
+
+manifest 除了檔案清單，還帶一份 `serverModIds`——伺服器實際載入的所有 mod id（含 JiJ）。
+客戶端拿 `ClientModIndex.Index.localMods()` 相減，就知道自己多了什麼。
+
+這是唯一能偵測到「拿舊整合包連新伺服器」的機制：那些殘留模組不在 manifest 裡，
+所以整個下載流程對它們是完全瞎的，而它們正是 registry 對不上、加入一秒後被踢的原因。
+
+三個護欄：
+
+1. `serverModIds` 為空（舊版伺服器）就完全不表示意見。
+2. `environment` 為 `client` 的一律不點名——Sodium、Iris、小地圖本來就不該出現在伺服器上。
+3. 讀不到 mod id 的 jar 跳過，用檔名猜會冤枉別人的模組。
+
+處置寫進 `PendingOps.disable`，由 `PendingOpsApplier` 搬到 `mods-disabled-by-automodfetcher/`。
+**搬而不刪**，這是「動玩家自己的模組」唯一能被接受的形式。
+
+### ⚠️ 已知限制：載入順序（為什麼要重啟兩次）
+
+三個 loader 都在**任何模組能執行程式碼之前**就掃完並解析好 `mods/`。所以 `PendingOpsApplier`
+在 Fabric 的 `preLaunch`（或 Forge/NeoForge 的 mod constructor）刪除／搬走一個 jar 時，
+**那個模組在這一輪仍然是載入著的**。磁碟對了，記憶體沒對。
+
+實測（1.20.1-fabric）：客戶端 log 裡 `- privatetestmod 1.0.0` 出現在「Loading N mods」清單，
+而 `Moved privatetestmod-1.0.0.jar to ...` 在其後——同一輪，先載入後搬走。
+
+這一輪去連伺服器必掉，而且踢出訊息不會提到原因。所以 `PendingOpsApplier.changedThisLaunch()`
+記下這件事，`ClientSync.decide()` 在最前面檢查它，直接出 `ModSyncRestartScreen`。
+這是整個模組唯一一處「擋下來」而不是「警告」——因為除了再重啟一次，沒有別的出路。
 
 ### ⚠️ 已知限制：Windows 檔案鎖
 遊戲執行中無法刪除已被 Fabric loader 開啟的 jar。因此移除是延後的：寫入 `pending-ops.json`，由 `preLaunch` entrypoint 在下次啟動時處理。刪不掉就留在清單裡下次再試，並在 log 提示玩家手動刪除。
@@ -134,6 +167,8 @@ src/main/
     client/
       ClientConfig.java             client.json（白名單等）
       SourcePolicy.java             這次連線可以從哪裡下載＝白名單 ∪ 本伺服器已獲授權的 host
+      ClientModIndex.java           本地索引；也記下每個 jar 的 modId 與 environment，
+                                    「多餘模組」的比對靠這個
       TrustedSources.java           trusted-sources.json（伺服器 → 已授權 host）
       ClientModIndex.java           啟動時背景建立本地雜湊索引
       SyncPlanner.java / SyncPlan   差異計算
@@ -141,7 +176,7 @@ src/main/
       InstalledState.java           本模組安裝過哪些檔案
       ClientNetworking.java         收清單 → 規劃 → 回覆伺服器 → 排入畫面
       ClientScreenQueue.java        斷線後接管；只在遊戲停在連線／斷線畫面時才覆蓋，不會跟玩家搶
-      gui/                          三個 Screen + LineList + Sizes
+      gui/                          四個 Screen（確認／進度／完成／再重啟一次）+ 斷線診斷 + LineList + Sizes
   resources/
     fabric.mod.json                 entrypoints: main / client / preLaunch
     assets/automodfetcher/lang/     en_us.json, zh_tw.json
@@ -179,6 +214,7 @@ src/main/
 其他自動產生的檔案：`resolve-cache.json`、`bundle/mods-bundle.zip`（伺服器）、
 `local-index.json` / `installed.json` / `pending-ops.json` / `trusted-servers.json` /
 `trusted-sources.json` / `skipped-servers.json`（客戶端）。
+被搬走的模組放在 `mods-disabled-by-automodfetcher/`（與 `mods/` 同層，不在裡面）。
 
 ---
 

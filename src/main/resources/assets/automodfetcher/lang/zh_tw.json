@@ -53,5 +53,11 @@
 	"automodfetcher.blocked.insecure": "    以未加密的 http 傳送，無法信任",
 	"automodfetcher.progress.entry.extracting": "  %s  解壓中",
 	"automodfetcher.command.bundling": "正在打包沒有平台收錄的模組……",
-	"automodfetcher.command.bundle_verifying": "正在檢查已發佈的模組包……"
+	"automodfetcher.command.bundle_verifying": "正在檢查已發佈的模組包……",
+	"automodfetcher.confirm.section.foreign": "這個伺服器沒有這些模組（%s）：",
+	"automodfetcher.confirm.foreign_hint": "  它們會被移到 mods 資料夾旁邊的 %s，不會被刪除。",
+	"automodfetcher.complete.disabled": "下次啟動時會把 %s 個模組移出 mods 資料夾",
+	"automodfetcher.restart.title": "還要再重啟一次",
+	"automodfetcher.restart.body": "模組資料夾已經就緒，但這一輪遊戲還在跑舊的那些。",
+	"automodfetcher.restart.why": "模組只在啟動時讀取，所以請再重開一次再加入。"
 }

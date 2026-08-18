@@ -153,6 +153,25 @@ AutoModFetcher 在這之後負責的是**後續更新**，而不是初次安裝�
 
 ---
 
+### 4.4 多餘的模組：加入即斷線的真正兇手 — ✅ 已完成
+
+實測抓到的：朋友拿舊測試包的實例連新伺服器，AMF 把 28 個該裝的都裝好了，他仍然在加入後
+**一秒**被踢。原因是他手上還有 17 個舊包留下、新伺服器沒有的模組（`aether`、`explorations`、
+`moogs_structures`、`spell_power`……），registry 對不上。
+
+AMF 當時對此完全是瞎的：`SyncPlanner` 只走訪 `manifest.entries()`，`PendingDiagnosis` 只帶
+`manual` 與 `blocked`——整個系統只回答「你缺什麼」，沒有一處在看「你多了什麼」。而下載清單
+永遠表達不出這件事。
+
+現在 manifest 多帶一份 `serverModIds`，客戶端相減就知道自己多了什麼，列出來，經同意後搬到
+`mods-disabled-by-automodfetcher/`。**搬而不刪**，純客戶端模組不點名。
+
+同時修掉一個相鄰的坑：移除／搬走要重啟兩次才乾淨（loader 在任何模組跑起來之前就掃完
+`mods/`，所以那一輪仍然載入著被移除的 jar）。`ClientSync` 現在會擋下這一輪的連線，
+叫玩家再重開一次，而不是讓他撞上同一個看不懂的斷線。
+
+---
+
 ## Phase 5：觸及率
 
 ### 5.1 支援 1.21.x — ✅ 1.21.1 已完成

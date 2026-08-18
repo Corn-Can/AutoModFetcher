@@ -19,6 +19,7 @@ import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
+import com.corncan.automodfetcher.platform.Loader;
 import com.corncan.automodfetcher.server.ServerModScanner.ScannedMod;
 import com.corncan.automodfetcher.server.export.BundleBuilder;
 import com.corncan.automodfetcher.server.resolver.CurseForgeResolver;
@@ -178,7 +179,8 @@ public final class ManifestBuilder {
 		AutoModFetcher.LOGGER.info("Offering a bundle of {} mod(s) from {}", bundle.contents().size(),
 				bundle.url());
 
-		return new ModManifest(manifest.entries(), List.copyOf(stillManual), List.of(bundle));
+		return new ModManifest(manifest.entries(), List.copyOf(stillManual), List.of(bundle),
+				manifest.serverModIds());
 	}
 
 	private static void lookUpOnPlatforms(ServerSyncConfig config, List<ScannedMod> needLookup,
@@ -299,7 +301,11 @@ public final class ManifestBuilder {
 							+ "hosting the file yourself.", entry.fileName(), entry.pageUrl());
 		}
 
-		return new ModManifest(List.copyOf(entries), List.copyOf(unresolved));
+		// Sent alongside the files so a client can also work out what it has that we do not.
+		// Downloads alone cannot express that, and it is the difference that drops someone a
+		// second after they join.
+		return new ModManifest(List.copyOf(entries), List.copyOf(unresolved), List.of(),
+				Set.copyOf(Loader.INSTANCE.loadedModIds()));
 	}
 
 	private static String manualUrlFor(ServerSyncConfig config, String fileName) {

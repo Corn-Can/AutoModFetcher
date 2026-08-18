@@ -47,6 +47,16 @@ public interface Loader {
 	 */
 	Set<String> loadedJarFileNames();
 
+	/**
+	 * Every mod id the loader has running, nested ones included.
+	 *
+	 * <p>Unlike {@link #loadedJarFileNames()} this deliberately counts mods bundled inside
+	 * other jars. The question it answers is "does this side have this mod at all", and a mod
+	 * shipped inside its parent is just as present as one with its own file — a client that
+	 * called it missing would be wrong about it.
+	 */
+	Set<String> loadedModIds();
+
 	/** This mod's own jar, or {@code null} when it cannot be located. */
 	Path ownJar();
 
@@ -121,6 +131,17 @@ public interface Loader {
 		}
 
 		@Override
+		public Set<String> loadedModIds() {
+			Set<String> ids = new HashSet<>();
+
+			for (var container : loader.getAllMods()) {
+				ids.add(container.getMetadata().getId());
+			}
+
+			return ids;
+		}
+
+		@Override
 		public Path ownJar() {
 			return loader.getModContainer(AutoModFetcher.MOD_ID)
 					.filter(container -> container.getOrigin().getKind()
@@ -178,6 +199,17 @@ public interface Loader {
 		}
 
 		@Override
+		public Set<String> loadedModIds() {
+			Set<String> ids = new HashSet<>();
+
+			for (var mod : net.neoforged.fml.ModList.get().getMods()) {
+				ids.add(mod.getModId());
+			}
+
+			return ids;
+		}
+
+		@Override
 		public Path ownJar() {
 			var file = net.neoforged.fml.ModList.get().getModFileById(AutoModFetcher.MOD_ID);
 			return file != null ? file.getFile().getFilePath() : null;
@@ -232,6 +264,17 @@ public interface Loader {
 			}
 
 			return names;
+		}
+
+		@Override
+		public Set<String> loadedModIds() {
+			Set<String> ids = new HashSet<>();
+
+			for (var mod : net.minecraftforge.fml.ModList.get().getMods()) {
+				ids.add(mod.getModId());
+			}
+
+			return ids;
 		}
 
 		@Override

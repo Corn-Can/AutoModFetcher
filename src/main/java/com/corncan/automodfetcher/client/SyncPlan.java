@@ -16,9 +16,19 @@ import com.corncan.automodfetcher.network.ModEntry;
  * @param manual    files the server could not provide a URL for at all
  * @param hostsNeedingConsent sites in this plan that are not on the standing allow list, and
  *                            that the player has not yet allowed this server to use
+ * @param foreign   mods the player has that this server does not run at all. Not a download
+ *                  problem and not something the server ever asked about — but a client
+ *                  carrying content the other side has never heard of is what gets someone
+ *                  dropped a second after joining, and nothing else in this plan can see it.
  */
 public record SyncPlan(List<ModEntry> downloads, List<ModBundle> bundles, List<Blocked> blocked,
-		List<String> deletions, List<ManualEntry> manual, List<String> hostsNeedingConsent) {
+		List<String> deletions, List<ManualEntry> manual, List<String> hostsNeedingConsent,
+		List<String> foreign) {
+
+	public SyncPlan(List<ModEntry> downloads, List<ModBundle> bundles, List<Blocked> blocked,
+			List<String> deletions, List<ManualEntry> manual, List<String> hostsNeedingConsent) {
+		this(downloads, bundles, blocked, deletions, manual, hostsNeedingConsent, List.of());
+	}
 
 	public record Blocked(ModEntry entry, String reasonKey) {
 		public static final String REASON_FILE_NAME = "automodfetcher.blocked.file_name";
@@ -27,7 +37,7 @@ public record SyncPlan(List<ModEntry> downloads, List<ModBundle> bundles, List<B
 
 	public boolean isEmpty() {
 		return downloads.isEmpty() && bundles.isEmpty() && blocked.isEmpty() && deletions.isEmpty()
-				&& manual.isEmpty();
+				&& manual.isEmpty() && foreign.isEmpty();
 	}
 
 	/**
@@ -37,7 +47,7 @@ public record SyncPlan(List<ModEntry> downloads, List<ModBundle> bundles, List<B
 	 * them, so they must never be a reason to keep a player out of a server.
 	 */
 	public boolean hasActionableWork() {
-		return !downloads.isEmpty() || !bundles.isEmpty() || !deletions.isEmpty();
+		return !downloads.isEmpty() || !bundles.isEmpty() || !deletions.isEmpty() || !foreign.isEmpty();
 	}
 
 	/**
@@ -53,7 +63,7 @@ public record SyncPlan(List<ModEntry> downloads, List<ModBundle> bundles, List<B
 	 */
 	public boolean isFullyAutomatic() {
 		return hasActionableWork() && blocked.isEmpty() && manual.isEmpty()
-				&& hostsNeedingConsent.isEmpty();
+				&& hostsNeedingConsent.isEmpty() && foreign.isEmpty();
 	}
 
 	/**
@@ -65,7 +75,7 @@ public record SyncPlan(List<ModEntry> downloads, List<ModBundle> bundles, List<B
 						java.util.stream.Stream.concat(
 								manual.stream().map(ManualEntry::fileName),
 								blocked.stream().map(entry -> entry.entry().fileName())),
-						hostsNeedingConsent.stream())
+						java.util.stream.Stream.concat(hostsNeedingConsent.stream(), foreign.stream()))
 				.sorted()
 				.collect(java.util.stream.Collectors.joining("|"));
 	}

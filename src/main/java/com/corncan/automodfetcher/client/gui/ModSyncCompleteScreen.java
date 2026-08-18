@@ -109,6 +109,13 @@ public class ModSyncCompleteScreen extends Screen {
 			line += 12;
 		}
 
+		if (session.disabledCount() > 0) {
+			context.drawCenteredString(this.font,
+					Component.translatable("automodfetcher.complete.disabled", session.disabledCount()),
+					this.width / 2, line, 0xFFA0A0A0);
+			line += 12;
+		}
+
 		if (session.failureCount() > 0) {
 			context.drawCenteredString(this.font,
 					Component.translatable("automodfetcher.complete.failed", session.failureCount()),

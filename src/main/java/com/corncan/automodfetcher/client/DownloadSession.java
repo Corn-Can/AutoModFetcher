@@ -595,6 +595,10 @@ public class DownloadSession {
 			queueDeletions();
 		}
 
+		if (!cancelled && !plan.foreign().isEmpty()) {
+			queueDisables();
+		}
+
 		cleanUpTempDir();
 
 		finished = true;
@@ -636,6 +640,27 @@ public class DownloadSession {
 		ops.delete = merged;
 		ops.save();
 		state.save();
+	}
+
+	/**
+	 * Sets the player's own mods aside, on the same deferred schedule as removals.
+	 *
+	 * <p>Nothing is deleted and nothing is recorded as ours: these are files we did not
+	 * install, and the only claim we have on them is the one the player just granted on the
+	 * confirm screen. {@code PendingOpsApplier} moves them to a folder they can drag back from.
+	 */
+	private void queueDisables() {
+		PendingOps ops = PendingOps.load();
+		List<String> merged = new ArrayList<>(ops.disable);
+
+		for (String fileName : plan.foreign()) {
+			if (!merged.contains(fileName)) {
+				merged.add(fileName);
+			}
+		}
+
+		ops.disable = merged;
+		ops.save();
 	}
 
 	private void setStatus(String key, Status status, String reason) {
@@ -725,6 +750,10 @@ public class DownloadSession {
 		return plan.deletions().size();
 	}
 
+	public int disabledCount() {
+		return plan.foreign().size();
+	}
+
 	public ClientConfig config() {
 		return config;
 	}
@@ -766,6 +795,6 @@ public class DownloadSession {
 		}
 
 		return new SyncPlan(unfinished, List.copyOf(bundles), List.of(), plan.deletions(), List.of(),
-				List.of());
+				List.of(), plan.foreign());
 	}
 }

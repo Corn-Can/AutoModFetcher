@@ -3,6 +3,7 @@ package com.corncan.automodfetcher.client;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -15,6 +16,7 @@ import java.util.stream.Stream;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.network.ModEntry;
+import com.corncan.automodfetcher.network.ModSide;
 import com.corncan.automodfetcher.util.Hashing;
 import com.corncan.automodfetcher.util.JarMetadata;
 import com.corncan.automodfetcher.util.Json;
@@ -35,8 +37,17 @@ public final class ClientModIndex {
 	private ClientModIndex() {
 	}
 
-	/** @param versionKeys "modid@version" for every jar present, however it was packaged */
-	public record Index(Set<String> sha512Hashes, Set<String> fileNames, Set<String> versionKeys) {
+	/**
+	 * @param versionKeys "modid@version" for every jar present, however it was packaged
+	 * @param localMods   one entry per jar directly in {@code mods/}, so a plan can reason
+	 *                    about what is here and not only about what is missing
+	 */
+	public record Index(Set<String> sha512Hashes, Set<String> fileNames, Set<String> versionKeys,
+			List<LocalMod> localMods) {
+	}
+
+	/** A jar sitting in the player's mods folder, as far as its own metadata describes it. */
+	public record LocalMod(String fileName, String modId, ModSide side) {
 	}
 
 	/** Cached per file so an unchanged mods folder costs no hashing at all on later launches. */
@@ -50,6 +61,7 @@ public final class ClientModIndex {
 		public String sha512;
 		public String modId;
 		public String version;
+		public String side;
 	}
 
 	public static void beginScan() {
@@ -82,9 +94,10 @@ public final class ClientModIndex {
 		Set<String> hashes = new HashSet<>();
 		Set<String> fileNames = new HashSet<>();
 		Set<String> versionKeys = new HashSet<>();
+		List<LocalMod> localMods = new ArrayList<>();
 
 		if (!Files.isDirectory(modsDir)) {
-			return new Index(hashes, fileNames, versionKeys);
+			return new Index(hashes, fileNames, versionKeys, List.of());
 		}
 
 		try (Stream<Path> stream = Files.list(modsDir)) {
@@ -105,23 +118,28 @@ public final class ClientModIndex {
 					entry.size = size;
 					entry.lastModified = lastModified;
 
-					if (cached != null && cached.sha512 != null && cached.size == size
-							&& cached.lastModified == lastModified) {
+					// An older cache has no side recorded, so it has to be re-read rather than
+					// trusted — a missing side would read as BOTH and flag a client-only mod.
+					if (cached != null && cached.sha512 != null && cached.side != null
+							&& cached.size == size && cached.lastModified == lastModified) {
 						entry.sha512 = cached.sha512;
 						entry.modId = cached.modId;
 						entry.version = cached.version;
+						entry.side = cached.side;
 					} else {
 						entry.sha512 = Hashing.sha512(jar);
 
 						JarMetadata metadata = JarMetadata.read(jar);
 						entry.modId = metadata.modId();
 						entry.version = metadata.version();
+						entry.side = metadata.side().name();
 					}
 
 					updated.byFileName.put(fileName, entry);
 
 					hashes.add(entry.sha512.toLowerCase(Locale.ROOT));
 					fileNames.add(fileName.toLowerCase(Locale.ROOT));
+					localMods.add(new LocalMod(fileName, entry.modId, sideOf(entry.side)));
 
 					String versionKey = ModEntry.versionKey(entry.modId, entry.version);
 
@@ -139,7 +157,15 @@ public final class ClientModIndex {
 		Json.writeQuietly(cachePath, updated);
 		AutoModFetcher.LOGGER.info("Indexed {} local mod file(s)", updated.byFileName.size());
 
-		return new Index(hashes, fileNames, versionKeys);
+		return new Index(hashes, fileNames, versionKeys, List.copyOf(localMods));
+	}
+
+	private static ModSide sideOf(String name) {
+		try {
+			return name == null ? ModSide.BOTH : ModSide.valueOf(name);
+		} catch (IllegalArgumentException e) {
+			return ModSide.BOTH;
+		}
 	}
 
 	/** Folds freshly downloaded files into the cache so the next launch does not rehash them. */

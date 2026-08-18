@@ -13,6 +13,7 @@ import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
+import com.corncan.automodfetcher.network.ModSide;
 
 public final class SyncPlanner {
 	private SyncPlanner() {
@@ -87,8 +88,63 @@ public final class SyncPlanner {
 				.filter(entry -> !hasLocally(entry, index))
 				.toList();
 
+		List<String> foreign = findForeign(manifest, index, incoming);
+
 		return new SyncPlan(List.copyOf(downloads), bundles, List.copyOf(blocked), deletions, manual,
-				List.copyOf(needConsent));
+				List.copyOf(needConsent), foreign);
+	}
+
+	/**
+	 * Mods the player has that the server is not running at all.
+	 *
+	 * <p>The failure this exists for leaves no trace in a download list. Someone reusing an old
+	 * modpack instance to join a new server ends up with every file the server asked for and a
+	 * dozen it never mentioned, joins, and is dropped a second later by registry sync — with a
+	 * message that names none of it. We already have both lists; comparing them is the whole
+	 * fix.
+	 *
+	 * <p>Two things keep this from becoming a nag. A server that never sent its mod ids is one
+	 * we know nothing about, so it gets no opinion. And a mod that declares itself client-only
+	 * is exactly what the player is entitled to run — Sodium, Iris, a minimap — so it is never
+	 * named, however many of them there are.
+	 */
+	private static List<String> findForeign(ModManifest manifest, ClientModIndex.Index index,
+			Set<String> incoming) {
+		if (manifest.serverModIds().isEmpty()) {
+			return List.of();
+		}
+
+		List<String> foreign = new ArrayList<>();
+
+		for (ClientModIndex.LocalMod local : index.localMods()) {
+			// No id means the jar told us nothing, and guessing from a file name is how you
+			// accuse someone's mod of being the problem when it is not.
+			if (local.modId() == null || local.modId().isBlank()) {
+				continue;
+			}
+
+			if (local.modId().equals(AutoModFetcher.MOD_ID)
+					|| manifest.serverModIds().contains(local.modId())) {
+				continue;
+			}
+
+			// Client-only by its own declaration. The server having no opinion on it is the
+			// normal, correct state, not a mismatch.
+			if (local.side() == ModSide.CLIENT) {
+				continue;
+			}
+
+			// About to be replaced by this very sync, so it is not a leftover.
+			if (incoming.contains(local.fileName())) {
+				continue;
+			}
+
+			foreign.add(local.fileName());
+		}
+
+		foreign.sort(String::compareToIgnoreCase);
+
+		return List.copyOf(foreign);
 	}
 
 	/**

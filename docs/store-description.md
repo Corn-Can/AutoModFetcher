@@ -17,8 +17,11 @@ Downloads only come from trusted sources (Modrinth & CurseForge) via HTTPS. Ever
 🔍 **Anywhere Else, You Decide:**
 If a server hosts a mod itself, you are shown the site and the exact files before anything is downloaded. Agreeing applies to that one server only — no other server gains access to it.
 
-🗂️ **Your Own Mods Are Safe:**
-The cleanup system only manages files installed by AutoModFetcher. Your client-side mods remain completely untouched.
+🗂️ **Your Own Mods Are Never Deleted:**
+Cleanup only ever *deletes* files AutoModFetcher installed itself. Nothing you added is removed, ever.
+
+🧹 **Leftovers From an Old Pack, Named:**
+Reusing an old instance for a new server leaves mods behind that the server doesn't run — the usual cause of being kicked one second after joining, with a message that explains nothing. AutoModFetcher lists them and, if you agree, moves them into a folder beside `mods` so you can drag them back. Client-only mods like Sodium and Iris are never touched.
 
 ⚙️ **Smart Prompts:**
 Check the "Trust this server" box, and it will handle future updates quietly. The security checks still run, but the prompts get out of your way.
@@ -60,7 +63,7 @@ Use `/automodfetcher reload` to rebuild the manifest without restarting the serv
 ## 📋 Requirements & Important Notes
 
 *   **Installation:** Must be installed on **both** the Server and the Client.
-*   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code.
+*   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code. When files are removed or set aside, that takes effect one launch later still — AutoModFetcher notices and asks for the extra restart rather than letting you join into a failure.
 *   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that — such mods are excluded from bundles, and players receive a direct link to that exact file version instead.
 *   **File Deletion:** Removed mods are deleted on the *next* launch, as Java locks running `.jar` files.
 ---
