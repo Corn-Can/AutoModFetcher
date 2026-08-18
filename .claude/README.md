@@ -133,14 +133,23 @@ manifest 除了檔案清單，還帶一份 `serverModIds`——伺服器實際�
 
 *   `PendingOpsHelper` **只能用 `java.base`**。它以 mod jar 單獨當 classpath 執行，
     沒有 Minecraft、沒有 loader、沒有 Gson——所以工作清單是用命令列參數傳的，不是讀 JSON。
-*   classpath 用 `PendingOpsHelper.class.getProtectionDomain().getCodeSource()` 取，
-    不是 `Loader.ownJar()`。dev 環境的模組橫跨 classes 與 resources 兩個目錄，
-    `ownJar()` 只回第一個，挑錯就是 helper 啟動即 ClassNotFound 而且靜默（輸出被丟棄）。
+*   **classpath 的挑選是這裡最容易錯的一步**，而且錯了完全沒有聲音（helper 輸出被丟棄，
+    症狀只是「檔案沒被移動」）。候選來源有兩個：`getProtectionDomain().getCodeSource()`
+    與 `Loader.ownJar()`；每個候選都要同時通過兩道檢查：
+    -   **必須屬於預設檔案系統。** Forge/NeoForge 的 ModLauncher 會給出它自家 union 檔案系統
+        裡的路徑，`toString()` 印出來是 `/`，裡面**真的**有那個 class，但對命令列毫無意義。
+        實測就是敗在這裡：`cp=/`，helper 啟動即死。
+    -   **必須真的含有那個 class。** dev 環境的模組橫跨 classes 與 resources 兩個目錄，
+        `ownJar()` 可能回傳 resources 目錄——真實存在，但是空的。
 *   觸發點是**各 loader 自己的關閉事件**（Fabric `CLIENT_STOPPING`、Forge/NeoForge
     `GameShuttingDownEvent`），不是 JVM shutdown hook。實測 hook 在 Minecraft 的關閉流程裡
     不可靠，而且那時 log4j 常常已經關了，失敗連痕跡都沒有。hook 仍保留當後備，
     `handOff()` 用 `AtomicBoolean` 保證只做一次。
-*   **不重啟遊戲。** 從遊戲裡重啟在會監管子程序的啟動器上本來就不可靠，而且沒必要。
+*   **不重啟遊戲，連按鈕都不留。** 曾經有「立即重啟」，實測發現它跟 helper 直接對撞：
+    `restartNow()` 先生出新遊戲程序再關掉自己，新遊戲立刻開始掃 `mods/`，而 helper 還在等舊
+    程序死掉——新遊戲必贏，移除永遠慢一步，玩家又變回要重開兩次。加上它在會監管子程序的
+    啟動器上本來就不可靠、Forge/NeoForge 根本拿不到啟動參數，所以整個拿掉了
+    （`GameRestarter` 與 `Loader.launchArguments()` 一併移除）。畫面上只有「關閉遊戲」。
 
 helper 沒跑成功時完全退回舊行為：`PendingOpsApplier` 下次啟動照做，
 `changedThisLaunch()` 為 true，`ClientSync.decide()` 出 `ModSyncRestartScreen` 擋下連線。
@@ -182,6 +191,7 @@ src/main/
       ServerNetworking.java         QUERY_START 送出清單、收到回覆後負責斷線
       resolver/                     ModrinthResolver / CurseForgeResolver / ResolveCache / Resolution
       export/                       MrpackExporter / CurseForgePackExporter
+                                    DirectLink（把瀏覽器上的分享頁網址改成直接下載網址）
                                     BundleBuilder（打包無平台收錄的模組，固定時間戳以確保可重現）
                                     BundleVerifier（抓一次 bundleUrl，確認玩家拿到的就是這份）
     client/
@@ -198,6 +208,9 @@ src/main/
       ClientScreenQueue.java        斷線後接管；只在遊戲停在連線／斷線畫面時才覆蓋，不會跟玩家搶
       gui/                          四個 Screen（確認／進度／完成／再重啟一次）+ 斷線診斷 + LineList + Sizes
   resources/
+    pack.mcmeta                     Forge/NeoForge 沒有它會在啟動時報「無法載入有效的
+                                    ResourcePackInfo」；pack_format 由各節點的
+                                    mod.pack_format 注入（1.20.1=15、1.21.1=34）
     fabric.mod.json                 entrypoints: main / client / preLaunch
     assets/automodfetcher/lang/     en_us.json, zh_tw.json
 ```

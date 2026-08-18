@@ -70,15 +70,6 @@ public interface Loader {
 	/** The loader's own version, for the same declaration. */
 	String loaderVersion();
 
-	/**
-	 * The game arguments this instance was started with, or {@code null} when the loader does
-	 * not keep them.
-	 *
-	 * <p>Needed to rebuild the launch command for a restart. It has to be the original array:
-	 * splitting {@code sun.java.command} on whitespace mangles every path with a space in it,
-	 * and those are the normal case on Windows.
-	 */
-	String[] launchArguments();
 
 	/**
 	 * The key a Modrinth pack uses for this loader's version. Fabric is the odd one out —
@@ -151,11 +142,6 @@ public interface Loader {
 		}
 
 		@Override
-		public String[] launchArguments() {
-			return loader.getLaunchArguments(false);
-		}
-
-		@Override
 		public String packLoaderId() {
 			return "fabric";
 		}
@@ -216,14 +202,6 @@ public interface Loader {
 		}
 
 		@Override
-		public String[] launchArguments() {
-			// NeoForge does not keep them, and Windows will not hand a process its own
-			// argument array back. Restarting is offered only where it can actually work, so
-			// the complete screen falls back to "quit" here rather than promising anything.
-			return null;
-		}
-
-		@Override
 		public String packLoaderId() {
 			return "neoforge";
 		}
@@ -281,14 +259,6 @@ public interface Loader {
 		public Path ownJar() {
 			var file = net.minecraftforge.fml.ModList.get().getModFileById(AutoModFetcher.MOD_ID);
 			return file != null ? file.getFile().getFilePath() : null;
-		}
-
-		@Override
-		public String[] launchArguments() {
-			// Same as NeoForge: not kept, and Windows will not hand a process its own argument
-			// array back. The complete screen falls back to "quit" rather than promising a
-			// restart it cannot do.
-			return null;
 		}
 
 		@Override

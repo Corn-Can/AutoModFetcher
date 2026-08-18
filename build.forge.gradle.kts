@@ -92,10 +92,12 @@ tasks {
 			register("name", "mod.name")
 			register("version", "mod.version")
 			register("minecraft", "mod.mc_compat")
+			register("pack_format", "mod.pack_format")
 			register("forge", "deps.forge_loader")
 		}
 
 		filesMatching("META-INF/mods.toml") { expand(props) }
+		filesMatching("pack.mcmeta") { expand(props) }
 
 		// Every other loader's metadata. Shipping any of it is worse than untidy: a jar
 		// carrying another loader's manifest looks like that loader's mod to anything reading.

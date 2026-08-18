@@ -96,9 +96,10 @@ jar，那一輪仍然載入著它——磁碟對了、記憶體沒對。照字�
 AMF 改成在遊戲關閉時交給一個極小的獨立程序：它等這個遊戲程序結束、檔案解鎖，才動 `mods/`。
 等你下次打開遊戲，資料夾已經是對的了——**一次就好**。
 
-那個程序**不會**幫你重開遊戲，這是刻意的。從遊戲裡重啟遊戲在會監管子程序的啟動器
-（CurseForge、Prism 等）上並不可靠，而我們也不需要那樣做：你本來就會自己重開，
-我們只要保證你回來的時候檔案是對的。
+**AMF 不提供「立即重啟」。** 從遊戲裡重啟遊戲在會監管子程序的啟動器（CurseForge、Prism 等）
+上並不可靠，Forge 與 NeoForge 更是連重建啟動指令的資訊都拿不到。而且就算做得到也不該做：
+新開的遊戲會搶在檔案處理完成之前掃描 `mods/`，反而變回兩次。所以畫面上只有「關閉遊戲」，
+四個版本行為一致。
 
 萬一那個程序沒能跑起來（防毒攔截之類），下次啟動仍會照舊處理，AMF 也會擋下該次連線
 叫你再重開一次，而不是讓你撞上看不懂的斷線。
@@ -233,17 +234,19 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 以前只能請玩家自己想辦法。現在可以打包成一個 zip 讓你自己上傳。
 
 ```
-/automodfetcher bundle          打包，並印出路徑與 SHA-512
-/automodfetcher bundle verify   抓一次你上傳的檔案，確認玩家拿到的就是這一份
+/automodfetcher bundle              打包，並印出路徑與 SHA-512
+/automodfetcher bundle url <網址>   設定網址、重建清單、並確認玩家真的拿得到
+/automodfetcher bundle verify       重新確認一次（換過模組重新上傳後用）
 ```
 
 流程：
 
 1. `/automodfetcher bundle`。它只會裝進**兩個平台都查不到**的檔案，
    輸出到 `config/automodfetcher/bundle/mods-bundle.zip`。
-2. 把那個 zip 上傳到任何地方，取得一個**直接下載連結**。
-3. 網址填進 `server.json` 的 `bundleUrl`，然後 `/automodfetcher reload`。
-4. `/automodfetcher bundle verify` 確認上傳的那份跟伺服器上的完全一致。
+2. 把那個 zip 上傳到任何地方。
+3. `/automodfetcher bundle url <網址>`。**直接從瀏覽器網址列複製貼上就好**——
+   Google Drive、Dropbox、GitHub 的分享頁網址會自動改成直接下載網址。
+   這一步會順便存設定、重建清單、並實際抓一次確認玩家真的拿得到。
 
 玩家那邊會看到一個明確的授權畫面，標示這些檔案來自 Modrinth / CurseForge 以外的來源，
 以及是哪個網站。同意之後，**只有這個伺服器**能從那個網站下載——不會影響他們連別的伺服器。
@@ -251,7 +254,7 @@ zip 整包先驗 SHA-512，解壓後每個 jar 再驗一次。
 
 #### 必須是直接下載連結
 
-分享頁面不行。`bundle verify` 會替你抓出這類問題，但先知道總比事後好：
+`bundle url` 會自動幫你改掉常見的分享頁網址，改不掉的也會在當下就抓出來。下表是原理：
 
 | 可以 | 不行 |
 |---|---|

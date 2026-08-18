@@ -29,6 +29,19 @@ public class PendingOps {
 	 */
 	public List<String> disable = new ArrayList<>();
 
+	/**
+	 * Whether anything is waiting on this game closing.
+	 *
+	 * <p>Checked before offering to restart the game from inside the game. Those two things
+	 * cannot both happen: the replacement starts scanning {@code mods/} while this process is
+	 * still alive, and the helper cannot touch the folder until it is dead. The new instance
+	 * wins that race every time, and the player is back where they started with the removal
+	 * still pending.
+	 */
+	public boolean hasWork() {
+		return !delete.isEmpty() || !disable.isEmpty();
+	}
+
 	public static PendingOps load() {
 		return Json.read(path(), PendingOps.class, PendingOps::new);
 	}

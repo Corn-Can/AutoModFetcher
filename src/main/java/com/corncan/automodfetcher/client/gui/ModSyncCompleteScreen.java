@@ -1,7 +1,7 @@
 package com.corncan.automodfetcher.client.gui;
 
+import com.corncan.automodfetcher.PendingOps;
 import com.corncan.automodfetcher.client.DownloadSession;
-import com.corncan.automodfetcher.client.GameRestarter;
 import com.corncan.automodfetcher.client.SyncPlan;
 
 import net.minecraft.client.gui.GuiGraphics;
@@ -21,7 +21,8 @@ import net.minecraft.network.chat.Component;
 public class ModSyncCompleteScreen extends Screen {
 	private final DownloadSession session;
 
-	private boolean restartFailed;
+	private boolean removalPending;
+
 
 	public ModSyncCompleteScreen(DownloadSession session) {
 		super(Component.translatable("automodfetcher.complete.title"));
@@ -33,22 +34,24 @@ public class ModSyncCompleteScreen extends Screen {
 		int primaryY = this.height / 2 + 30;
 		int secondaryY = this.height / 2 + 54;
 
-		// The useful first action depends on how this ended: unfinished work wants another
-		// go, a clean install wants the game restarted so the mods actually load.
+		removalPending = PendingOps.load().hasWork();
+
+		// Closing is the only thing offered, on every loader. Relaunching the game from inside
+		// the game was never dependable — a launcher that supervises its children defeats it,
+		// and Forge and NeoForge never kept the arguments to try — and once removals are
+		// finished off after this process dies, a replacement started from in here would simply
+		// outrun them. What is left is honest and the same everywhere: close, then reopen.
 		if (session.hasUnfinishedWork()) {
 			this.addRenderableWidget(Button.builder(
 					Component.translatable("automodfetcher.complete.retry"), button -> retry())
 					.bounds(this.width / 2 - 100, primaryY, 200, 20)
 					.build());
-		} else if (GameRestarter.isSupported()) {
-			this.addRenderableWidget(Button.builder(
-					Component.translatable("automodfetcher.complete.restart_now"), button -> restartNow())
-					.bounds(this.width / 2 - 100, primaryY, 200, 20)
-					.build());
 		}
 
 		this.addRenderableWidget(Button.builder(
-				Component.translatable("automodfetcher.complete.quit"), button -> quit())
+				Component.translatable(removalPending
+						? "automodfetcher.complete.quit_to_finish"
+						: "automodfetcher.complete.quit"), button -> quit())
 				.bounds(this.width / 2 - 154, secondaryY, 150, 20)
 				.build());
 
@@ -71,15 +74,6 @@ public class ModSyncCompleteScreen extends Screen {
 	private void quit() {
 		if (this.minecraft != null) {
 			this.minecraft.stop();
-		}
-	}
-
-	/** Only close this instance once the new one is actually up. */
-	private void restartNow() {
-		if (GameRestarter.restart()) {
-			quit();
-		} else {
-			restartFailed = true;
 		}
 	}
 
@@ -125,17 +119,19 @@ public class ModSyncCompleteScreen extends Screen {
 
 		// Restarting only helps once everything is in place; saying so avoids sending someone
 		// off to relaunch into exactly the same missing mods.
-		Component closing = session.hasUnfinishedWork()
-				? Component.translatable("automodfetcher.complete.incomplete")
-				: Component.translatable("automodfetcher.complete.restart");
+		Component closing;
+
+		if (session.hasUnfinishedWork()) {
+			closing = Component.translatable("automodfetcher.complete.incomplete");
+		} else if (removalPending) {
+			// The removal happens as this closes, so "restart" would understate what the
+			// player has to do and overstate what has already happened.
+			closing = Component.translatable("automodfetcher.complete.close_to_finish");
+		} else {
+			closing = Component.translatable("automodfetcher.complete.restart");
+		}
 
 		context.drawCenteredString(this.font, closing, this.width / 2, line + 8, 0xFFFFD966);
-
-		if (restartFailed) {
-			context.drawCenteredString(this.font,
-					Component.translatable("automodfetcher.complete.restart_failed"),
-					this.width / 2, line + 20, 0xFFFF5555);
-		}
 	}
 
 	@Override

@@ -8,8 +8,10 @@ import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.server.export.BundleBuilder;
 import com.corncan.automodfetcher.server.export.BundleVerifier;
 import com.corncan.automodfetcher.server.export.CurseForgePackExporter;
+import com.corncan.automodfetcher.server.export.DirectLink;
 import com.corncan.automodfetcher.server.export.MrpackExporter;
 import com.corncan.automodfetcher.util.ModPaths;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
 //? if fabric {
@@ -48,7 +50,11 @@ public final class AutoModFetcherCommand {
 				.then(Commands.literal("bundle")
 						.executes(context -> buildBundle(context.getSource()))
 						.then(Commands.literal("verify")
-								.executes(context -> verifyBundle(context.getSource()))));
+								.executes(context -> verifyBundle(context.getSource())))
+						.then(Commands.literal("url")
+								.then(Commands.argument("address", StringArgumentType.greedyString())
+										.executes(context -> setBundleUrl(context.getSource(),
+												StringArgumentType.getString(context, "address"))))));
 	}
 
 	/**
@@ -104,14 +110,58 @@ public final class AutoModFetcherCommand {
 		// The zip on its own does nothing. Saying the next step here is the difference between
 		// a feature and a file sitting in a folder.
 		if (config.bundleUrl.isBlank()) {
-			source.sendSuccess(() -> Component.literal("Next: upload that file somewhere with a direct "
-					+ "download link, put the URL in bundleUrl in " + ServerSyncConfig.FILE_NAME
-					+ ", then run /automodfetcher reload.").withStyle(ChatFormatting.YELLOW), false);
+			source.sendSuccess(() -> Component.literal("Next: upload that file anywhere you like, then run "
+					+ "/automodfetcher bundle url <address>. Paste the address straight from your "
+					+ "browser — Google Drive, Dropbox and GitHub links are corrected for you.")
+					.withStyle(ChatFormatting.YELLOW), false);
 			return;
 		}
 
-		source.sendSuccess(() -> Component.literal("Next: upload that file to " + config.bundleUrl
-				+ " again, then run /automodfetcher bundle verify.").withStyle(ChatFormatting.YELLOW), false);
+		source.sendSuccess(() -> Component.literal("Next: upload that file again, then run "
+				+ "/automodfetcher bundle verify.").withStyle(ChatFormatting.YELLOW), false);
+	}
+
+	/**
+	 * Publishes the bundle at an address, in one step.
+	 *
+	 * <p>Editing a JSON file on a server usually means a control panel or an FTP client, and
+	 * then remembering to reload and to check. That is four chances to stop halfway and leave
+	 * a bundle nobody can use, so the command does all of it: fix the address, save it, rebuild
+	 * the manifest, and go and fetch what players would actually get.
+	 */
+	private static int setBundleUrl(CommandSourceStack source, String address) {
+		MinecraftServer server = source.getServer();
+		DirectLink.Result link = DirectLink.normalise(address);
+
+		if (link.note() != null) {
+			// Say it rather than do it silently: the operator pasted one thing and the server
+			// is about to hand players another.
+			source.sendSuccess(() -> Component.literal(link.note()).withStyle(ChatFormatting.YELLOW), false);
+		}
+
+		ServerSyncConfig config = ServerSyncConfig.load();
+		config.bundleUrl = link.url();
+		config.save();
+
+		source.sendSuccess(() -> Component.literal("bundleUrl set to ")
+				.append(Component.literal(link.url()).withStyle(ChatFormatting.AQUA)), true);
+		source.sendSuccess(() -> Component.translatable("automodfetcher.command.bundle_verifying"), false);
+
+		runOffThread(server, source, "AutoModFetcher-bundle-url", () -> {
+			ServerNetworking.rebuild();
+			ModBundle bundle = BundleBuilder.describe(link.url());
+
+			if (bundle == null) {
+				server.execute(() -> source.sendFailure(Component.literal(
+						"No bundle has been built yet. Run /automodfetcher bundle first.")));
+				return;
+			}
+
+			BundleVerifier.Result result = BundleVerifier.verify(bundle);
+			server.execute(() -> reportVerdict(source, bundle, result));
+		});
+
+		return 1;
 	}
 
 	/** Fetches what players would actually get and checks it against what is on disk here. */
@@ -137,25 +187,27 @@ public final class AutoModFetcherCommand {
 			}
 
 			BundleVerifier.Result result = BundleVerifier.verify(bundle);
-
-			server.execute(() -> {
-				if (result.ok()) {
-					source.sendSuccess(() -> Component.literal("The published bundle matches: "
-							+ bundle.contents().size() + " mod(s), " + bundle.size() + " bytes.")
-							.withStyle(ChatFormatting.GREEN), true);
-					return;
-				}
-
-				source.sendFailure(Component.literal("Players cannot use that bundle — " + result.problem()));
-
-				if (result.hint() != null) {
-					source.sendSuccess(() -> Component.literal(result.hint())
-							.withStyle(ChatFormatting.YELLOW), false);
-				}
-			});
+			server.execute(() -> reportVerdict(source, bundle, result));
 		});
 
 		return 1;
+	}
+
+	private static void reportVerdict(CommandSourceStack source, ModBundle bundle,
+			BundleVerifier.Result result) {
+		if (result.ok()) {
+			source.sendSuccess(() -> Component.literal("Ready: players will get "
+					+ bundle.contents().size() + " mod(s) from that address.")
+					.withStyle(ChatFormatting.GREEN), true);
+			return;
+		}
+
+		source.sendFailure(Component.literal("Players cannot use that bundle — " + result.problem()));
+
+		if (result.hint() != null) {
+			source.sendSuccess(() -> Component.literal(result.hint())
+					.withStyle(ChatFormatting.YELLOW), false);
+		}
 	}
 
 	/** Anything that hashes files or waits on the network, kept off the server thread. */

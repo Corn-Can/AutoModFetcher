@@ -84,10 +84,12 @@ tasks {
 			register("name", "mod.name")
 			register("version", "mod.version")
 			register("minecraft", "mod.mc_compat")
+			register("pack_format", "mod.pack_format")
 			register("java", "mod.java")
 		}
 
 		filesMatching("fabric.mod.json") { expand(props) }
+		filesMatching("pack.mcmeta") { expand(props) }
 
 		// NeoForge's metadata has no meaning here, and shipping it is worse than untidy: a
 		// jar carrying neoforge.mods.toml looks like a NeoForge mod to anything that reads it.

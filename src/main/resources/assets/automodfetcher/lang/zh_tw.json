@@ -28,8 +28,6 @@
 	"automodfetcher.complete.quit": "關閉遊戲",
 	"automodfetcher.complete.menu": "回主選單",
 	"automodfetcher.confirm.connect_anyway": "仍要連線",
-	"automodfetcher.complete.restart_now": "立即重新啟動",
-	"automodfetcher.complete.restart_failed": "無法自動重啟——請手動關閉並重新開啟遊戲。",
 	"automodfetcher.confirm.connect_anyway_warning": "若伺服器需要這些模組，你可能一進去就被中斷連線。",
 	"automodfetcher.kicked.title": "與伺服器的連線中斷",
 	"automodfetcher.kicked.server_said": "伺服器訊息：%s",
@@ -59,5 +57,7 @@
 	"automodfetcher.complete.disabled": "下次啟動時會把 %s 個模組移出 mods 資料夾",
 	"automodfetcher.restart.title": "還要再重啟一次",
 	"automodfetcher.restart.body": "模組資料夾已經就緒，但這一輪遊戲還在跑舊的那些。",
-	"automodfetcher.restart.why": "模組只在啟動時讀取，所以請再重開一次再加入。"
+	"automodfetcher.restart.why": "模組只在啟動時讀取，所以請再重開一次再加入。",
+	"automodfetcher.complete.quit_to_finish": "關閉遊戲以完成",
+	"automodfetcher.complete.close_to_finish": "關閉遊戲——多餘的模組會在關閉時移除，然後照常重新開啟就好。"
 }

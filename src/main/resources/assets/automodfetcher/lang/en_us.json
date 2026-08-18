@@ -28,8 +28,6 @@
 	"automodfetcher.complete.quit": "Quit game",
 	"automodfetcher.complete.menu": "Back to menu",
 	"automodfetcher.confirm.connect_anyway": "Connect anyway",
-	"automodfetcher.complete.restart_now": "Restart now",
-	"automodfetcher.complete.restart_failed": "Could not restart automatically — please close and reopen the game.",
 	"automodfetcher.confirm.connect_anyway_warning": "If the server needs these, you may be disconnected right after joining.",
 	"automodfetcher.kicked.title": "Disconnected from the server",
 	"automodfetcher.kicked.server_said": "The server said: %s",
@@ -59,5 +57,7 @@
 	"automodfetcher.complete.disabled": "%s mod(s) will be moved out on the next launch",
 	"automodfetcher.restart.title": "One more restart",
 	"automodfetcher.restart.body": "Your mods folder is ready, but this session is still running the old ones.",
-	"automodfetcher.restart.why": "Mods are only read at launch, so restart once more before joining."
+	"automodfetcher.restart.why": "Mods are only read at launch, so restart once more before joining.",
+	"automodfetcher.complete.quit_to_finish": "Close the game to finish",
+	"automodfetcher.complete.close_to_finish": "Close the game — the leftover mods are removed as it exits, then just reopen it."
 }

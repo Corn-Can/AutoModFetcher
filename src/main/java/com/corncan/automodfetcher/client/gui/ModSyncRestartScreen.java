@@ -1,6 +1,5 @@
 package com.corncan.automodfetcher.client.gui;
 
-import com.corncan.automodfetcher.client.GameRestarter;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -31,22 +30,6 @@ public class ModSyncRestartScreen extends Screen {
 	protected void init() {
 		int buttonY = this.height / 2 + 30;
 
-		if (GameRestarter.isSupported()) {
-			this.addRenderableWidget(Button.builder(
-					Component.translatable("automodfetcher.complete.restart_now"), button -> restart())
-					.bounds(this.width / 2 - 154, buttonY, 150, 20)
-					.build());
-
-			this.addRenderableWidget(Button.builder(
-					Component.translatable("automodfetcher.complete.menu"), button -> onClose())
-					.bounds(this.width / 2 + 4, buttonY, 150, 20)
-					.build());
-
-			return;
-		}
-
-		// Forge and NeoForge cannot rebuild their own command line, so quitting is the only
-		// thing we can actually offer to do for them.
 		this.addRenderableWidget(Button.builder(
 				Component.translatable("automodfetcher.complete.quit"),
 				button -> this.minecraft.stop())
@@ -57,15 +40,6 @@ public class ModSyncRestartScreen extends Screen {
 				Component.translatable("automodfetcher.complete.menu"), button -> onClose())
 				.bounds(this.width / 2 + 4, buttonY, 150, 20)
 				.build());
-	}
-
-	private void restart() {
-		if (!GameRestarter.restart()) {
-			this.addRenderableWidget(Button.builder(
-					Component.translatable("automodfetcher.complete.restart_failed"), button -> onClose())
-					.bounds(this.width / 2 - 100, this.height / 2 + 54, 200, 20)
-					.build());
-		}
 	}
 
 	@Override

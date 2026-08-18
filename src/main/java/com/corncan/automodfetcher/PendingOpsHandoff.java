@@ -1,5 +1,6 @@
 package com.corncan.automodfetcher;
 
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -87,8 +88,11 @@ public final class PendingOpsHandoff {
 					.redirectError(ProcessBuilder.Redirect.DISCARD)
 					.start();
 
-			AutoModFetcher.LOGGER.info("Handed {} pending mod change(s) to a helper process; the next "
-					+ "launch will already be up to date", work.size());
+			// The classpath is named because it is the one thing that can be wrong here without
+			// anything else looking wrong: the helper's output goes nowhere, so a bad entry is
+			// a process that starts, fails to find its main class, and dies in silence.
+			AutoModFetcher.LOGGER.info("Handed {} pending mod change(s) to a helper process (cp={}); "
+					+ "the next launch will already be up to date", work.size(), jar);
 		} catch (Throwable e) {
 			// A shutdown hook that throws achieves nothing except an ugly log on the way out.
 			AutoModFetcher.LOGGER.debug("Could not hand off pending mod changes", e);
@@ -96,35 +100,73 @@ public final class PendingOpsHandoff {
 	}
 
 	/**
-	 * The classpath entry the helper class itself came from.
+	 * A classpath entry that really contains {@link PendingOpsHelper}.
 	 *
-	 * <p>Asked of the class rather than of the loader, because this has to be an entry that
-	 * definitely contains {@link PendingOpsHelper}. A loader's idea of "our jar" is a single
-	 * path, and in a development environment the mod is split across a classes directory and a
-	 * resources directory — pick the wrong one and the helper starts and immediately dies with
-	 * a missing main class, silently, because its output goes nowhere.
+	 * <p>A candidate has to pass two tests, and both were learned by watching this fail. It
+	 * must belong to the real file system: Forge hands out paths inside its own union file
+	 * system, which contain the class quite genuinely and mean nothing at all to a command
+	 * line. And it must actually hold the class: in a development environment a loader's idea
+	 * of "our jar" can be the resources directory, which is a real directory and an empty one.
+	 * Either mistake spawns a process that dies on a missing main class, in silence, because
+	 * the helper's output goes nowhere.
 	 *
-	 * <p>Falls back to the loader when the location is not a plain path. Forge and NeoForge can
-	 * report a {@code union:} URL that no file system will resolve.
+	 * @return null when nothing usable was found, in which case the hand-off is skipped and
+	 *         the next launch does the work the slow way
 	 */
 	private static Path classpathEntry() {
+		for (Path candidate : candidates()) {
+			if (candidate == null || candidate.getFileSystem() != FileSystems.getDefault()) {
+				continue;
+			}
+
+			if (holdsHelper(candidate)) {
+				return candidate;
+			}
+		}
+
+		return null;
+	}
+
+	private static List<Path> candidates() {
+		List<Path> candidates = new ArrayList<>();
+
 		try {
 			var source = PendingOpsHelper.class.getProtectionDomain().getCodeSource();
 
 			if (source != null && source.getLocation() != null) {
-				Path path = Paths.get(source.getLocation().toURI());
+				candidates.add(Paths.get(source.getLocation().toURI()));
+			}
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.debug("Our own code source is not a usable path", e);
+		}
 
-				if (Files.exists(path)) {
-					return path;
+		try {
+			candidates.add(Loader.INSTANCE.ownJar());
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.debug("The loader could not name our jar", e);
+		}
+
+		return candidates;
+	}
+
+	private static boolean holdsHelper(Path candidate) {
+		String entry = PendingOpsHelper.class.getName().replace('.', '/') + ".class";
+
+		try {
+			if (Files.isDirectory(candidate)) {
+				return Files.isRegularFile(candidate.resolve(entry));
+			}
+
+			if (Files.isRegularFile(candidate)) {
+				try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(candidate.toFile())) {
+					return zip.getEntry(entry) != null;
 				}
 			}
 		} catch (Exception e) {
-			AutoModFetcher.LOGGER.debug("Could not locate our own classpath entry", e);
+			AutoModFetcher.LOGGER.debug("Could not read {} while looking for the helper", candidate, e);
 		}
 
-		Path jar = Loader.INSTANCE.ownJar();
-
-		return jar != null && Files.exists(jar) ? jar : null;
+		return false;
 	}
 
 	/**

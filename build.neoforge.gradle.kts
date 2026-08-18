@@ -72,10 +72,12 @@ tasks {
 			register("name", "mod.name")
 			register("version", "mod.version")
 			register("minecraft", "mod.mc_compat")
+			register("pack_format", "mod.pack_format")
 			register("neoforge", "deps.neo_loader")
 		}
 
 		filesMatching("META-INF/neoforge.mods.toml") { expand(props) }
+		filesMatching("pack.mcmeta") { expand(props) }
 
 		// Fabric's metadata and access widener have no meaning here and would only confuse
 		// anyone opening the jar.

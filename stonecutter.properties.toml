@@ -11,6 +11,9 @@ loomx.loom_version = "1.14-SNAPSHOT"
 
 ["1.20.1"]
 mod.mc_releases = ["1.20.1"]
+# Resource pack format for this Minecraft version. Forge and NeoForge refuse to build a
+# ResourcePackInfo for a mod jar without a pack.mcmeta, and log an error at startup for it.
+mod.pack_format = "15"
 
 [fabric."1.20.1"]
 # Pinned, not a range. The login query phase this mod hooks was removed in 1.20.2, so a
@@ -29,6 +32,7 @@ deps.forge_loader = "1.20.1-47.4.0"
 
 ["1.21.1"]
 mod.mc_releases = ["1.21.1"]
+mod.pack_format = "34"
 
 [fabric."1.21.1"]
 # Pinned for the same reason the 1.20.1 build is: this jar is compiled against one set of

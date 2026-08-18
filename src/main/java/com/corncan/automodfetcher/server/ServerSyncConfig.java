@@ -80,6 +80,10 @@ public class ServerSyncConfig {
 		return config;
 	}
 
+	public void save() {
+		Json.writeQuietly(ModPaths.configDir().resolve(FILE_NAME), this);
+	}
+
 	public boolean isExcluded(String fileName) {
 		String lower = fileName.toLowerCase(Locale.ROOT);
 

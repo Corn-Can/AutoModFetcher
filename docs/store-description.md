@@ -43,7 +43,7 @@ Mods are matched against Modrinth by hash, then by name and version. Even if you
 Other people's mods are never rehosted — the manifest only sends secure platform URLs. If an author disables third-party downloads, that is honoured, and no bundle can include their file.
 
 📦 **Ship Your Own Mods:**
-`/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of — into a single zip. Upload it anywhere, paste the link, and players get it automatically. `/automodfetcher bundle verify` checks what they will actually receive.
+`/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of — into a single zip. Upload it anywhere, then `/automodfetcher bundle url <address>` with the link copied straight from your browser: Google Drive, Dropbox and GitHub share pages are corrected for you, and the server fetches it back to prove players will actually get it.
 
 🗃️ **One-Command Modpacks:**
 Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and CurseForge zip formats.
@@ -63,7 +63,7 @@ Use `/automodfetcher reload` to rebuild the manifest without restarting the serv
 ## 📋 Requirements & Important Notes
 
 *   **Installation:** Must be installed on **both** the Server and the Client.
-*   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code — **one** restart: removals are finished off by a tiny helper once the game has closed, so the folder is already correct when you reopen it. Nothing relaunches your game for you, which is exactly why it works on every launcher. When files are removed or set aside, that takes effect one launch later still — AutoModFetcher notices and asks for the extra restart rather than letting you join into a failure.
+*   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code — **one** restart. Removals are finished off by a tiny helper once the game has closed, so the folder is already correct when you reopen it. Nothing relaunches the game for you: that is unreliable under launchers that supervise their own processes, and a new instance would only race the cleanup. Close, reopen, play. When files are removed or set aside, that takes effect one launch later still — AutoModFetcher notices and asks for the extra restart rather than letting you join into a failure.
 *   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that — such mods are excluded from bundles, and players receive a direct link to that exact file version instead.
 *   **File Deletion:** Removed mods are deleted on the *next* launch, as Java locks running `.jar` files.
 ---
