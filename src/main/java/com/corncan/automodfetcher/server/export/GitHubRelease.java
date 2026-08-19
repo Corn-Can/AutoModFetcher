@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Base64;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.util.Json;
@@ -27,8 +28,9 @@ import com.google.gson.JsonObject;
  * under the operator's control, and a release asset is a plain direct download with no share
  * page to get wrong.
  *
- * <p>The token is never logged, and never put anywhere it could be echoed back — including
- * into the error messages, which quote status codes rather than requests.
+ * <p>The token is never logged. Failures quote what GitHub said back, which is safe and far
+ * more useful than a status code alone — the token travels in a request header, and nothing
+ * sends it in a response.
  */
 public final class GitHubRelease {
 	private static final String API = "https://api.github.com";
@@ -66,7 +68,7 @@ public final class GitHubRelease {
 		HttpResponse<String> response = http.send(get(API + "/user", token),
 				HttpResponse.BodyHandlers.ofString());
 
-		require(response.statusCode(), 200, "asking who the token belongs to");
+		require(response.statusCode(), 200, "asking who the token belongs to", response.body());
 
 		String login = Json.GSON.fromJson(response.body(), JsonObject.class).get("login").getAsString();
 		String repo = login + "/" + DEFAULT_REPO_NAME;
@@ -85,7 +87,7 @@ public final class GitHubRelease {
 		}
 
 		if (existing.statusCode() != 404) {
-			require(existing.statusCode(), 200, "looking for the repository");
+			require(existing.statusCode(), 200, "looking for the repository", existing.body());
 		}
 
 		JsonObject body = new JsonObject();
@@ -94,6 +96,9 @@ public final class GitHubRelease {
 		body.addProperty("private", false);
 		body.addProperty("has_issues", false);
 		body.addProperty("has_wiki", false);
+		// A release hangs off a tag and a tag needs a commit, so a repository with no history
+		// cannot have one. Asking GitHub to lay down a README is the cheapest way to have some.
+		body.addProperty("auto_init", true);
 
 		HttpResponse<String> created = http.send(
 				HttpRequest.newBuilder(URI.create(API + "/user/repos"))
@@ -107,10 +112,58 @@ public final class GitHubRelease {
 						.build(),
 				HttpResponse.BodyHandlers.ofString());
 
-		require(created.statusCode(), 201, "creating the repository");
+		require(created.statusCode(), 201, "creating the repository", created.body());
 
 		AutoModFetcher.LOGGER.info("Created the public repository {} to hold the bundle. It has to be "
 				+ "public: a player's game fetches the file without any credentials.", repo);
+	}
+
+	/**
+	 * Gives an empty repository its first commit.
+	 *
+	 * <p>Needed for one awkward case: a repository that exists but has never been committed to.
+	 * GitHub answers a 422 to release creation there, which reads as though the tag were
+	 * malformed and is really "there is nothing here to tag". New repositories are made with a
+	 * README to avoid it, but this runs for every repository — one the operator named can be
+	 * just as empty, and so can one this mod created before it knew to initialise them.
+	 */
+	private static void ensureNotEmpty(HttpClient http, String token, String repo) throws Exception {
+		HttpResponse<String> commits = http.send(
+				get(API + "/repos/" + repo + "/commits?per_page=1", token),
+				HttpResponse.BodyHandlers.ofString());
+
+		// 409 is how GitHub says "Git Repository is empty"; anything else means it has history,
+		// or a problem the release call will report far better than a guess here would.
+		if (commits.statusCode() != 409) {
+			return;
+		}
+
+		JsonObject body = new JsonObject();
+		body.addProperty("message", "Hold mod bundles published by AutoModFetcher");
+		String readme = "# " + repo.substring(repo.indexOf('/') + 1) + "\n\n"
+				+ "Mods served to players by AutoModFetcher. The bundle is attached to a release "
+				+ "rather than committed here.\n";
+
+		body.addProperty("content", Base64.getEncoder()
+				.encodeToString(readme.getBytes(StandardCharsets.UTF_8)));
+
+		HttpResponse<String> created = http.send(
+				HttpRequest.newBuilder(URI.create(API + "/repos/" + repo + "/contents/README.md"))
+						.header("Accept", "application/vnd.github+json")
+						.header("Authorization", "Bearer " + token)
+						.header("X-GitHub-Api-Version", API_VERSION)
+						.header("User-Agent", AutoModFetcher.userAgent())
+						.header("Content-Type", "application/json")
+						.timeout(Duration.ofSeconds(30))
+						.PUT(HttpRequest.BodyPublishers.ofString(Json.GSON.toJson(body)))
+						.build(),
+				HttpResponse.BodyHandlers.ofString());
+
+		require(created.statusCode(), 201, "giving the empty repository its first commit",
+				created.body());
+
+		AutoModFetcher.LOGGER.info("{} had no commits, so a release could not be made there. "
+				+ "Added a README to give it one.", repo);
 	}
 
 	/**
@@ -130,6 +183,11 @@ public final class GitHubRelease {
 
 		try {
 			String repo = resolveRepo(http, token, configuredRepo);
+
+			// Whether we made it or the operator named it, a repository with no commits cannot
+			// hold a release, and the 422 GitHub answers with does not say so.
+			ensureNotEmpty(http, token, repo);
+
 			JsonObject release = findRelease(http, repo, token, tag);
 
 			if (release == null) {
@@ -159,7 +217,7 @@ public final class GitHubRelease {
 			return null;
 		}
 
-		require(response.statusCode(), 200, "looking for the release");
+		require(response.statusCode(), 200, "looking for the release", response.body());
 
 		return Json.GSON.fromJson(response.body(), JsonObject.class);
 	}
@@ -184,7 +242,7 @@ public final class GitHubRelease {
 						.build(),
 				HttpResponse.BodyHandlers.ofString());
 
-		require(response.statusCode(), 201, "creating the release");
+		require(response.statusCode(), 201, "creating the release", response.body());
 		AutoModFetcher.LOGGER.info("Created release {} on {}", tag, repo);
 
 		return Json.GSON.fromJson(response.body(), JsonObject.class);
@@ -222,7 +280,7 @@ public final class GitHubRelease {
 							.build(),
 					HttpResponse.BodyHandlers.ofString());
 
-			require(response.statusCode(), 204, "removing the previous bundle");
+			require(response.statusCode(), 204, "removing the previous bundle", response.body());
 
 			return true;
 		}
@@ -247,7 +305,7 @@ public final class GitHubRelease {
 						.build(),
 				HttpResponse.BodyHandlers.ofString());
 
-		require(response.statusCode(), 201, "uploading the bundle");
+		require(response.statusCode(), 201, "uploading the bundle", response.body());
 
 		return Json.GSON.fromJson(response.body(), JsonObject.class);
 	}
@@ -264,12 +322,15 @@ public final class GitHubRelease {
 	}
 
 	/**
-	 * Turns a status code into something an operator can act on.
+	 * Turns a failed call into something an operator can act on.
 	 *
-	 * <p>Says nothing about the request itself. The only interesting header on it is the token,
-	 * and a log line is exactly the wrong place for that to surface.
+	 * <p>Quotes what GitHub said, which is usually more specific than anything guessable from
+	 * the status code alone — a 422 that actually reads "Validation Failed: tag_name is not a
+	 * valid tag" saves an evening. This is the response body, never the request: the token
+	 * rides in a request header and must not reach a log, but nothing sends it back.
 	 */
-	private static void require(int actual, int expected, String what) throws IOException {
+	private static void require(int actual, int expected, String what, String body)
+			throws IOException {
 		if (actual == expected) {
 			return;
 		}
@@ -280,11 +341,24 @@ public final class GitHubRelease {
 					+ "or name githubRepo yourself and give a fine-grained token Contents: read and write";
 			case 404 -> "no such repository, or the token cannot see it — check githubRepo";
 			case 413 -> "the bundle is too large for a release asset (the limit is 2 GiB)";
-			case 422 -> "GitHub rejected it as invalid — the tag or asset name may be unusable";
+			case 422 -> "GitHub rejected it as invalid — for a release this usually means the "
+					+ "repository has no commits yet";
 			default -> "HTTP " + actual;
 		};
 
-		throw new IOException("GitHub refused while " + what + ": " + detail);
+		throw new IOException("GitHub refused while " + what + ": " + detail + said(body));
+	}
+
+	/** GitHub's own words, trimmed to something that belongs on one line of a log. */
+	private static String said(String body) {
+		if (body == null || body.isBlank()) {
+			return "";
+		}
+
+		String flattened = body.replaceAll("\s+", " ").trim();
+
+		return " — GitHub said: "
+				+ (flattened.length() > 300 ? flattened.substring(0, 300) + "..." : flattened);
 	}
 
 	private static String encode(String value) {
