@@ -40,7 +40,11 @@ public class ServerSyncConfig {
 	public String bundleUrl = "";
 
 	/**
-	 * Where to upload the bundle, as {@code owner/repo}. Leave blank to upload by hand.
+	 * Where to upload the bundle, as {@code owner/repo}. Optional.
+	 *
+	 * <p>Leave it blank and a public repository is made on the token's own account the first
+	 * time, so setting this up is one token and nothing else. Name one here if you would
+	 * rather choose, or if it belongs to an organisation.
 	 *
 	 * <p>GitHub Releases because it costs nothing, keeps files indefinitely, allows 2 GiB per
 	 * asset, and — the part that matters — the repository is yours. Nothing here hosts your
@@ -49,13 +53,32 @@ public class ServerSyncConfig {
 	public String githubRepo = "";
 
 	/**
-	 * A GitHub token with permission to write releases on {@link #githubRepo}.
+	 * A GitHub token allowed to write releases. Filling this in turns on automatic uploading.
 	 *
-	 * <p>A fine-grained token limited to that one repository with Contents: read and write is
-	 * enough; it never needs anything else. This file is worth protecting accordingly — the
-	 * token is never written to the log, but it is sitting here in plain text.
+	 * <p>A classic token with the single {@code repo} checkbox is the easiest thing to make and
+	 * is all this needs, including making the repository for you. A fine-grained token works
+	 * too, with Contents: read and write — but it cannot create a repository, so name one in
+	 * {@link #githubRepo} yourself when using one.
+	 *
+	 * <p>This file is worth protecting accordingly. The token is never written to the log, and
+	 * error messages quote status codes rather than requests, but it is sitting here in plain
+	 * text: it does not belong in anything you hand out.
 	 */
 	public String githubToken = "";
+
+	/**
+	 * Largest bundle that may travel with the manifest instead of being hosted anywhere.
+	 *
+	 * <p>The reason this exists at all: someone whose only unpublished mod is one they wrote
+	 * should not need an account, a token and a direct link to hand it to three friends. A mod
+	 * jar is usually a couple of hundred kilobytes and the login packet has room, so below this
+	 * size there is nothing to host — the file simply arrives over the connection.
+	 *
+	 * <p>Above it, a URL is required, because this costs the server's upload bandwidth once per
+	 * player and the packet it rides in is capped at a mebibyte regardless. Set it to 0 to
+	 * always require hosting.
+	 */
+	public long maxEmbeddedBundleBytes = 768 * 1024;
 
 	/** The release the bundle is attached to. Reused, so old links keep working. */
 	public String githubReleaseTag = "automodfetcher-bundle";

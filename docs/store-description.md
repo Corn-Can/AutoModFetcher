@@ -43,7 +43,7 @@ Mods are matched against Modrinth by hash, then by name and version. Even if you
 Other people's mods are never rehosted — the manifest only sends secure platform URLs. An author who disables third-party downloads is honoured: their file is left out of bundles and players are pointed at it instead. There is a switch to override that, off unless you turn it on, and it names every file it includes — because that is your decision to answer for, not the mod's.
 
 📦 **Ship Your Own Mods:**
-`/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of — into a single zip. Give it a GitHub repository and a token and that one command also uploads it, sets the address and fetches it back to prove players can reach it. Prefer to host elsewhere? Upload it yourself and paste the link straight from your browser with `/automodfetcher bundle url` — Drive, Dropbox and GitHub share pages are corrected for you.
+`/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of. **For a small one that is the entire setup:** it travels with the server's reply, so there is no account, no upload and no link to find. Larger packs need somewhere to live — paste a GitHub token and the same command uploads it for you, or host it anywhere and paste the address straight from your browser, share pages and all.
 
 🗃️ **One-Command Modpacks:**
 Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and CurseForge zip formats.

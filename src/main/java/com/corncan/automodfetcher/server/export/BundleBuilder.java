@@ -149,9 +149,11 @@ public final class BundleBuilder {
 	/**
 	 * Reads back a zip built earlier, so building the manifest never has to repack one.
 	 *
-	 * @return null when there is no usable bundle on disk
+	 * @param url        where it was published, or blank when it was not
+	 * @param embedLimit largest zip that may travel with the manifest instead
+	 * @return null when there is no usable bundle on disk, or nowhere for it to come from
 	 */
-	public static ModBundle describe(String url) throws IOException {
+	public static ModBundle describe(String url, long embedLimit) throws IOException {
 		Path file = bundleFile();
 
 		if (!Files.isRegularFile(file)) {
@@ -166,7 +168,17 @@ public final class BundleBuilder {
 
 		Hashing.FileHashes hashes = Hashing.hash(file);
 
-		return new ModBundle(url.trim(), hashes.sha512(), hashes.size(), contents);
+		if (!url.isBlank()) {
+			return ModBundle.hosted(url.trim(), hashes.sha512(), hashes.size(), contents);
+		}
+
+		// Nobody published it. Small enough to ride along with the manifest is the difference
+		// between working out of the box and telling someone to go and find a file host.
+		if (hashes.size() > embedLimit) {
+			return null;
+		}
+
+		return ModBundle.embedded(hashes.sha512(), hashes.size(), contents, Files.readAllBytes(file));
 	}
 
 	private static List<BundledMod> readIndex(Path file) throws IOException {

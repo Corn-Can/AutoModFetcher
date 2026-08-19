@@ -60,5 +60,7 @@
 	"automodfetcher.restart.why": "Mods are only read at launch, so restart once more before joining.",
 	"automodfetcher.complete.quit_to_finish": "Close the game to finish",
 	"automodfetcher.complete.close_to_finish": "Close the game — the leftover mods are removed as it exits, then just reopen it.",
-	"automodfetcher.command.bundle_uploading": "Uploading to %s..."
+	"automodfetcher.command.bundle_uploading": "Uploading to %s...",
+	"automodfetcher.confirm.section.bundle_direct": "%s file(s) came with the server's reply:",
+	"automodfetcher.confirm.bundle_detail_direct": "    %s, already received — nothing to download"
 }

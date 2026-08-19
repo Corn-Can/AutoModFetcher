@@ -204,6 +204,7 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
     "my-private-mod-1.0.jar": "https://example.com/my-private-mod-1.0.jar"
   },
   "bundleUrl": "",
+  "maxEmbeddedBundleBytes": 786432,
   "githubRepo": "",
   "githubToken": "",
   "githubReleaseTag": "automodfetcher-bundle",
@@ -223,7 +224,8 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 | `curseforgeApiKey` | 只在有模組不在 Modrinth 上、或要匯出 CF 整合包時才需要 |
 | `excludeFileNames` | 不要通知客戶端的檔案，支援結尾 `*` 萬用字元 |
 | `manualUrls` | 兩個平台都查不到時，自己指定下載網址（key 是完整檔名）。**必須提供與伺服器上位元組完全相同的檔案**，否則客戶端驗證會失敗 |
-| `bundleUrl` | 打包出來的 zip 上傳後的**直接下載**網址。留空則不啟用。`manualUrls` 優先於它。設定 GitHub 後會自動填寫 |
+| `maxEmbeddedBundleBytes` | 小於這個大小的 bundle 直接隨連線送給玩家，完全不用上傳。預設 768 KB，設 0 則一律要求網址 |
+| `bundleUrl` | 超過上限時，zip 上傳後的**直接下載**網址。`manualUrls` 優先於它。設定 GitHub 後會自動填寫 |
 | `githubRepo` / `githubToken` | 填了就在 `/automodfetcher bundle` 時自動上傳到 release 並設定 `bundleUrl`。token 需要該 repo 的 Contents: read and write |
 | `githubReleaseTag` | 附件掛在哪個 release，預設 `automodfetcher-bundle`。沿用同一個，網址才不會每次改變 |
 | `includeAuthorRestrictedMods` | 預設 `false`。開啟後，作者關閉第三方下載的模組也會進包——**責任在你**，詳見上節 |
@@ -248,26 +250,51 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 
 #### 最省事：讓它自己上傳
 
-在 `server.json` 填兩個欄位：
+在 `server.json` 填**一個**欄位就好：
 
 ```json
-"githubRepo": "你的帳號/你的repo",
-"githubToken": "github_pat_..."
+"githubToken": "ghp_..."
 ```
 
-token 用 fine-grained、只給那一個 repo 的 **Contents: read and write** 就夠了。之後 `/automodfetcher bundle`
-一行做完：打包 → 上傳到 release → 寫回 `bundleUrl` → 重建清單 → 抓回來確認。之後每次改模組
-重跑同一行就好，網址不會變（同名附件會被取代）。
+取得方式（不用懂 Git，也不用先建 repo）：
+GitHub → Settings → Developer settings → **Tokens (classic)** → Generate new token →
+勾選 **`repo`** 這一項 → 產生後複製。
+
+之後 `/automodfetcher bundle` 一行做完：打包 → **需要的話自動幫你建一個公開 repo** →
+上傳到 release → 寫回 `bundleUrl` → 重建清單 → 抓回來確認。之後每次改模組重跑同一行就好，
+網址不會變（同名附件會被取代）。
+
+那個 repo 必須是**公開**的——玩家的遊戲要能不帶任何憑證抓到檔案。建立時 log 會寫明這件事。
+
+想自己指定 repo（或用組織的）就填 `githubRepo`。這種情況下 fine-grained token 也可以，
+給那個 repo 的 **Contents: read and write** 即可（fine-grained 沒辦法建 repo，所以要自己先建好）。
 
 GitHub Releases 單檔上限 2 GiB，附件不計入 repo 容量，下載頻寬沒有公布的配額——對模組包等於無限。
 **token 是明文存在 `server.json` 裡**，這個檔案要當作機密看待（它不會被寫進 log）。
 
-流程：
+#### 小的模組包：什麼都不用設定
 
-1. `/automodfetcher bundle`。它只會裝進**兩個平台都查不到**的檔案，
-   輸出到 `config/automodfetcher/bundle/mods-bundle.zip`。
-2. 把那個 zip 上傳到任何地方。
-3. `/automodfetcher bundle url <網址>`。**直接從瀏覽器網址列複製貼上就好**——
+```
+/automodfetcher bundle
+```
+
+**這樣就好了。** 只要打包出來的 zip 小於 `maxEmbeddedBundleBytes`（預設 768 KB），
+它會**直接隨伺服器的回應送給玩家**——不用雲端、不用帳號、不用開連接埠、不用填任何網址。
+自製模組通常只有幾百 KB，這條路涵蓋絕大多數情況。
+
+玩家那邊會顯示「N 個檔案隨伺服器的回應一起送來了」，因為沒有第三方網站，
+所以也不會出現非官方來源的授權提示——位元組來自他本來就要連的那台伺服器。
+
+這不是「內建檔案伺服器」：沒有對外開埠、沒有公開網址、只有正在加入的玩家拿得到，
+而且能入包的東西完全沒變（只有兩平台都查不到的）。
+
+#### 比較大的包：上傳一次
+
+超過上限就需要一個網址。三步：
+
+1. `/automodfetcher bundle` —— 產出 `config/automodfetcher/bundle/mods-bundle.zip`
+2. 把那個 zip 上傳到任何地方
+3. `/automodfetcher bundle url <網址>` —— **直接從瀏覽器網址列複製貼上就好**，
    Google Drive、Dropbox、GitHub 的分享頁網址會自動改成直接下載網址。
    這一步會順便存設定、重建清單、並實際抓一次確認玩家真的拿得到。
 

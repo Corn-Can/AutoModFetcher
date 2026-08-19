@@ -60,5 +60,7 @@
 	"automodfetcher.restart.why": "模組只在啟動時讀取，所以請再重開一次再加入。",
 	"automodfetcher.complete.quit_to_finish": "關閉遊戲以完成",
 	"automodfetcher.complete.close_to_finish": "關閉遊戲——多餘的模組會在關閉時移除，然後照常重新開啟就好。",
-	"automodfetcher.command.bundle_uploading": "正在上傳到 %s……"
+	"automodfetcher.command.bundle_uploading": "正在上傳到 %s……",
+	"automodfetcher.confirm.section.bundle_direct": "%s 個檔案隨伺服器的回應一起送來了：",
+	"automodfetcher.confirm.bundle_detail_direct": "    %s，已經收到——不需要下載"
 }

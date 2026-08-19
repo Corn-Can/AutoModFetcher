@@ -39,7 +39,78 @@ public final class GitHubRelease {
 	}
 
 	/** @param downloadUrl the direct address to hand to clients */
-	public record Result(String downloadUrl, boolean replacedExisting) {
+	public record Result(String downloadUrl, boolean replacedExisting, String repo) {
+	}
+
+	/** The repository made when the operator did not name one. */
+	private static final String DEFAULT_REPO_NAME = "automodfetcher-bundle";
+
+	/**
+	 * Works out which repository to use, creating one when nobody named it.
+	 *
+	 * <p>This is the difference between "set up a GitHub repository" and "paste a token". A
+	 * server owner who has never used GitHub should not have to learn what a repository is to
+	 * hand their friends a mod, so with a token alone we ask who it belongs to and make them
+	 * one named after this mod.
+	 *
+	 * <p>It has to be public. Release assets on a private repository need an authenticated
+	 * request, and the whole point is an address a player's game can fetch without credentials.
+	 * That is said out loud when the repository is created rather than left to be discovered.
+	 */
+	private static String resolveRepo(HttpClient http, String token, String configured)
+			throws Exception {
+		if (!configured.isBlank()) {
+			return configured.trim();
+		}
+
+		HttpResponse<String> response = http.send(get(API + "/user", token),
+				HttpResponse.BodyHandlers.ofString());
+
+		require(response.statusCode(), 200, "asking who the token belongs to");
+
+		String login = Json.GSON.fromJson(response.body(), JsonObject.class).get("login").getAsString();
+		String repo = login + "/" + DEFAULT_REPO_NAME;
+
+		ensureRepo(http, token, repo);
+
+		return repo;
+	}
+
+	private static void ensureRepo(HttpClient http, String token, String repo) throws Exception {
+		HttpResponse<String> existing = http.send(get(API + "/repos/" + repo, token),
+				HttpResponse.BodyHandlers.ofString());
+
+		if (existing.statusCode() == 200) {
+			return;
+		}
+
+		if (existing.statusCode() != 404) {
+			require(existing.statusCode(), 200, "looking for the repository");
+		}
+
+		JsonObject body = new JsonObject();
+		body.addProperty("name", DEFAULT_REPO_NAME);
+		body.addProperty("description", "Mods served to players by AutoModFetcher.");
+		body.addProperty("private", false);
+		body.addProperty("has_issues", false);
+		body.addProperty("has_wiki", false);
+
+		HttpResponse<String> created = http.send(
+				HttpRequest.newBuilder(URI.create(API + "/user/repos"))
+						.header("Accept", "application/vnd.github+json")
+						.header("Authorization", "Bearer " + token)
+						.header("X-GitHub-Api-Version", API_VERSION)
+						.header("User-Agent", AutoModFetcher.userAgent())
+						.header("Content-Type", "application/json")
+						.timeout(Duration.ofSeconds(30))
+						.POST(HttpRequest.BodyPublishers.ofString(Json.GSON.toJson(body)))
+						.build(),
+				HttpResponse.BodyHandlers.ofString());
+
+		require(created.statusCode(), 201, "creating the repository");
+
+		AutoModFetcher.LOGGER.info("Created the public repository {} to hold the bundle. It has to be "
+				+ "public: a player's game fetches the file without any credentials.", repo);
 	}
 
 	/**
@@ -48,7 +119,8 @@ public final class GitHubRelease {
 	 * <p>Replacing rather than versioning is the point: the address stays the same, so a
 	 * {@code bundleUrl} set once keeps working through every later rebuild.
 	 */
-	public static Result upload(String repo, String token, String tag, Path file) throws IOException {
+	public static Result upload(String configuredRepo, String token, String tag, Path file)
+			throws IOException {
 		HttpClient http = HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(15))
 				.followRedirects(HttpClient.Redirect.NORMAL)
@@ -57,6 +129,7 @@ public final class GitHubRelease {
 		String assetName = file.getFileName().toString();
 
 		try {
+			String repo = resolveRepo(http, token, configuredRepo);
 			JsonObject release = findRelease(http, repo, token, tag);
 
 			if (release == null) {
@@ -68,7 +141,7 @@ public final class GitHubRelease {
 
 			JsonObject asset = uploadAsset(http, repo, token, releaseId, assetName, file);
 
-			return new Result(asset.get("browser_download_url").getAsString(), replaced);
+			return new Result(asset.get("browser_download_url").getAsString(), replaced, repo);
 		} catch (IOException e) {
 			throw e;
 		} catch (Exception e) {
@@ -203,7 +276,8 @@ public final class GitHubRelease {
 
 		String detail = switch (actual) {
 			case 401 -> "the token was rejected — check githubToken";
-			case 403 -> "the token is not allowed to do that — it needs Contents: read and write";
+			case 403 -> "the token is not allowed to do that — a classic token needs the repo scope, "
+					+ "or name githubRepo yourself and give a fine-grained token Contents: read and write";
 			case 404 -> "no such repository, or the token cannot see it — check githubRepo";
 			case 413 -> "the bundle is too large for a release asset (the limit is 2 GiB)";
 			case 422 -> "GitHub rejected it as invalid — the tag or asset name may be unusable";

@@ -185,19 +185,26 @@ public final class SyncPlanner {
 				continue;
 			}
 
-			if (!config.isSchemeAllowed(bundle.url())) {
-				// Nothing to ask the player here: no answer makes plain http safe to install
-				// from, and the hash is the only guard a swapped jar would have to beat.
-				AutoModFetcher.LOGGER.warn("Refusing the mod bundle at {}: downloads must use https",
-						bundle.url());
-				continue;
+			// A bundle that came with the manifest has no host to vet. There is no third party
+			// in it at all — the bytes arrived from the server the player chose to join, over
+			// the connection they opened to it — so the only question left is the one the
+			// confirm screen already asks: may these mods be installed.
+			if (!bundle.isEmbedded()) {
+				if (!config.isSchemeAllowed(bundle.url())) {
+					// Nothing to ask the player here: no answer makes plain http safe to install
+					// from, and the hash is the only guard a swapped jar would have to beat.
+					AutoModFetcher.LOGGER.warn("Refusing the mod bundle at {}: downloads must use https",
+							bundle.url());
+					continue;
+				}
+
+				if (policy.needsConsent(bundle.url())) {
+					needConsent.add(ClientConfig.hostOf(bundle.url()));
+				}
 			}
 
-			if (policy.needsConsent(bundle.url())) {
-				needConsent.add(ClientConfig.hostOf(bundle.url()));
-			}
-
-			wanted.add(new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), List.copyOf(missing)));
+			wanted.add(new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), List.copyOf(missing),
+					bundle.data()));
 		}
 
 		return List.copyOf(wanted);

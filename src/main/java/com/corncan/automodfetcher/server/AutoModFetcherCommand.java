@@ -82,8 +82,7 @@ public final class AutoModFetcherCommand {
 
 			server.execute(() -> reportBundle(source, result, config));
 
-			if (result.contents().isEmpty() || config.githubRepo.isBlank()
-					|| config.githubToken.isBlank()) {
+			if (result.contents().isEmpty() || config.githubToken.isBlank()) {
 				return;
 			}
 
@@ -91,17 +90,19 @@ public final class AutoModFetcherCommand {
 			// invisible: the server carries on telling players to install by hand.
 			server.execute(() -> source.sendSuccess(
 					() -> Component.translatable("automodfetcher.command.bundle_uploading",
-							config.githubRepo), false));
+							config.githubRepo.isBlank() ? "GitHub" : config.githubRepo), false));
 
 			GitHubRelease.Result upload = GitHubRelease.upload(config.githubRepo, config.githubToken,
 					config.githubReleaseTag, result.file());
 
 			config.bundleUrl = upload.downloadUrl();
+			// Written back so the repository that was made for them is theirs to see and keep.
+			config.githubRepo = upload.repo();
 			config.save();
 
 			ServerNetworking.rebuild();
 
-			ModBundle published = BundleBuilder.describe(upload.downloadUrl());
+			ModBundle published = BundleBuilder.describe(upload.downloadUrl(), 0);
 			BundleVerifier.Result verdict = published == null
 					? null
 					: BundleVerifier.verify(published);
@@ -153,7 +154,16 @@ public final class AutoModFetcherCommand {
 		}
 
 		// Nothing more to say when the upload is about to handle the rest of it.
-		if (!config.githubRepo.isBlank() && !config.githubToken.isBlank()) {
+		if (!config.githubToken.isBlank()) {
+			return;
+		}
+
+		// Small enough to travel with the manifest: there is no next step, and telling someone
+		// to go and find a file host would be inventing work that is already done.
+		if (config.bundleUrl.isBlank() && result.size() <= config.maxEmbeddedBundleBytes) {
+			source.sendSuccess(() -> Component.literal("Small enough to send over the connection — "
+					+ "players will get it on their next join. Nothing to upload.")
+					.withStyle(ChatFormatting.GREEN), false);
 			return;
 		}
 
@@ -199,7 +209,7 @@ public final class AutoModFetcherCommand {
 
 		runOffThread(server, source, "AutoModFetcher-bundle-url", () -> {
 			ServerNetworking.rebuild();
-			ModBundle bundle = BundleBuilder.describe(link.url());
+			ModBundle bundle = BundleBuilder.describe(link.url(), 0);
 
 			if (bundle == null) {
 				server.execute(() -> source.sendFailure(Component.literal(
@@ -228,7 +238,7 @@ public final class AutoModFetcherCommand {
 		source.sendSuccess(() -> Component.translatable("automodfetcher.command.bundle_verifying"), true);
 
 		runOffThread(server, source, "AutoModFetcher-bundle-verify", () -> {
-			ModBundle bundle = BundleBuilder.describe(config.bundleUrl);
+			ModBundle bundle = BundleBuilder.describe(config.bundleUrl, 0);
 
 			if (bundle == null) {
 				server.execute(() -> source.sendFailure(Component.literal(

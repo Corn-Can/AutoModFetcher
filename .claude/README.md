@@ -57,8 +57,16 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
 *   **快取:** `resolve-cache.json` 以 SHA-1 為 key；未命中也會快取 24 小時，避免每次開服重打 API。
 *   清單只在**伺服器啟動時於背景執行緒建構一次**，之後每位玩家連線直接送快取結果。
 *   **兩個平台都查不到的檔案**（`unresolved` 且無 `pageUrl`）可由 `/automodfetcher bundle` 打包成
-    一個 zip，管理員自行上傳，網址填 `bundleUrl`。`ManifestBuilder.attachBundle()` 會把這些檔案
-    從 `unresolved` 移出、改掛在 `ModBundle` 上。作者關閉第三方下載的（有 `pageUrl`）**永遠不入包**。
+    一個 zip。`ManifestBuilder.attachBundle()` 會把這些檔案從 `unresolved` 移出、改掛在
+    `ModBundle` 上。作者關閉第三方下載的（有 `pageUrl`）預設不入包，
+    見 `includeAuthorRestrictedMods`。
+*   **`ModBundle` 有兩種形態**：`hosted()` 帶網址、`embedded()` 帶位元組。
+    小於 `maxEmbeddedBundleBytes`（預設 768 KB）且沒設 `bundleUrl` 時走 embedded——
+    zip 直接塞進 manifest 封包，隨登入查詢送到客戶端。
+    **這是新手路徑的關鍵**：不用帳號、不用網址、不用開埠。
+    上限存在的理由有兩個：vanilla 的 `ClientboundCustomQueryPacket` payload 上限是 1 MiB，
+    而且這會消耗伺服器上傳頻寬（每個玩家一次）。
+    embedded 的 bundle 在客戶端**不需要 host 授權**——沒有第三方，位元組來自玩家本來就要連的伺服器。
 
 ### 4. 異步下載層 (Concurrency)
 *   `java.net.http.HttpClient` + 固定大小 daemon 執行緒池（預設 3 條）。

@@ -62,14 +62,32 @@ public class DownloadSession {
 	 * <p>They arrive by the same route and are checked the same way, so the fetching itself has
 	 * no reason to know which it is holding.
 	 */
-	private record Target(String key, String url, long size, String sha512) {
+	private record Target(String key, String url, long size, String sha512, byte[] data) {
 		static Target of(ModEntry entry) {
-			return new Target(entry.fileName(), entry.url(), entry.size(), entry.sha512());
+			return new Target(entry.fileName(), entry.url(), entry.size(), entry.sha512(), NO_DATA);
 		}
 
 		static Target of(ModBundle bundle) {
-			return new Target(keyOf(bundle), bundle.url(), bundle.size(), bundle.sha512());
+			return new Target(keyOf(bundle), bundle.url(), bundle.size(), bundle.sha512(), bundle.data());
 		}
+	}
+
+	private static final byte[] NO_DATA = new byte[0];
+
+	/**
+	 * Puts a bundle that arrived with the manifest where the rest of the code expects to find
+	 * it, so verification, extraction and failure all work exactly as they do for a download.
+	 */
+	private String writeEmbedded(Target target, Path temp) throws Exception {
+		if (target.data().length != target.size()) {
+			throw new IOException("Expected " + target.size() + " bytes but the manifest carried "
+					+ target.data().length);
+		}
+
+		Files.write(temp, target.data());
+		progress.put(target.key(), target.size());
+
+		return Hashing.hex(java.security.MessageDigest.getInstance("SHA-512").digest(target.data()));
 	}
 
 	private final SyncPlan plan;
@@ -242,7 +260,9 @@ public class DownloadSession {
 
 			try {
 				Path temp = partFileFor(target);
-				String sha512 = fetch(target, temp);
+				String sha512 = target.data().length > 0
+						? writeEmbedded(target, temp)
+						: fetch(target, temp);
 
 				if (!sha512.equalsIgnoreCase(target.sha512())) {
 					// A mismatch means the bytes on disk are wrong, so resuming from them would
@@ -795,7 +815,7 @@ public class DownloadSession {
 					.toList();
 
 			if (!missing.isEmpty()) {
-				bundles.add(new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), missing));
+				bundles.add(new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), missing, bundle.data()));
 			}
 		}
 

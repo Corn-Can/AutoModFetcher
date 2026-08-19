@@ -159,14 +159,20 @@ public class ModSyncConfirmScreen extends Screen {
 		}
 
 		for (ModBundle bundle : plan.bundles()) {
-			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.section.bundle",
-					bundle.contents().size(), ClientConfig.hostOf(bundle.url())), LineList.Line.WHITE));
+			lines.add(LineList.Line.of(bundle.isEmbedded()
+					? Component.translatable("automodfetcher.confirm.section.bundle_direct",
+							bundle.contents().size())
+					: Component.translatable("automodfetcher.confirm.section.bundle",
+							bundle.contents().size(), ClientConfig.hostOf(bundle.url())),
+					LineList.Line.WHITE));
 
 			for (BundledMod mod : bundle.contents()) {
 				lines.add(LineList.Line.of(Component.literal("  " + mod.fileName()), LineList.Line.GREEN));
 			}
 
-			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.bundle_detail",
+			lines.add(LineList.Line.of(Component.translatable(bundle.isEmbedded()
+					? "automodfetcher.confirm.bundle_detail_direct"
+					: "automodfetcher.confirm.bundle_detail",
 					Sizes.format(bundle.size())), LineList.Line.GREY));
 			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 		}

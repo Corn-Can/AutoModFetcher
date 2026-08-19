@@ -100,34 +100,30 @@ public final class ManifestBuilder {
 				.map(ManualEntry::fileName)
 				.toList();
 
-		if (config.bundleUrl == null || config.bundleUrl.isBlank()) {
-			// Two different situations, and only one of them is yours to fix. A file no platform
-			// carries can be bundled or given a manualUrls entry. A file whose author switched
-			// off third-party downloads must not be — hosting it yourself is the very thing they
-			// opted out of.
-			if (!unknown.isEmpty()) {
-				AutoModFetcher.LOGGER.warn(
-						"No platform carries: {}. Run /automodfetcher bundle to pack them into a zip "
-								+ "you can host, or add a download URL to manualUrls in config/{}/{}. "
-								+ "Until then players are asked to install these by hand.",
-						String.join(", ", unknown), AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
-			}
-
-			return manifest;
-		}
-
+		String url = config.bundleUrl == null ? "" : config.bundleUrl;
 		ModBundle bundle;
 
 		try {
-			bundle = BundleBuilder.describe(config.bundleUrl);
+			bundle = BundleBuilder.describe(url, config.maxEmbeddedBundleBytes);
 		} catch (IOException e) {
 			AutoModFetcher.LOGGER.error("Could not read the mod bundle; players will not be offered it", e);
 			return manifest;
 		}
 
 		if (bundle == null) {
-			AutoModFetcher.LOGGER.warn("bundleUrl is set but no bundle has been built yet. "
-					+ "Run /automodfetcher bundle, then upload the zip it writes.");
+			// Nothing to offer. Which advice helps depends on why, and the two reasons want
+			// opposite things said.
+			if (!unknown.isEmpty()) {
+				AutoModFetcher.LOGGER.warn(
+						"No platform carries: {}. Run /automodfetcher bundle — anything under {} bytes "
+								+ "is sent to players over the connection with nothing to host. Larger "
+								+ "than that, upload the zip and run /automodfetcher bundle url, or put "
+								+ "a GitHub token in config/{}/{}. Until then players are asked to "
+								+ "install these by hand.",
+						String.join(", ", unknown), config.maxEmbeddedBundleBytes,
+						AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
+			}
+
 			return manifest;
 		}
 
@@ -152,7 +148,7 @@ public final class ManifestBuilder {
 			return manifest;
 		}
 
-		bundle = new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), current);
+		bundle = new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), current, bundle.data());
 
 		Set<String> bundled = current.stream()
 				.map(mod -> mod.fileName().toLowerCase(Locale.ROOT))
@@ -176,8 +172,13 @@ public final class ManifestBuilder {
 					String.join(", ", missed));
 		}
 
-		AutoModFetcher.LOGGER.info("Offering a bundle of {} mod(s) from {}", bundle.contents().size(),
-				bundle.url());
+		if (bundle.isEmbedded()) {
+			AutoModFetcher.LOGGER.info("Offering a bundle of {} mod(s) ({} bytes) over the connection "
+					+ "itself; nothing needs hosting", bundle.contents().size(), bundle.size());
+		} else {
+			AutoModFetcher.LOGGER.info("Offering a bundle of {} mod(s) from {}", bundle.contents().size(),
+					bundle.url());
+		}
 
 		return new ModManifest(manifest.entries(), List.copyOf(stillManual), List.of(bundle),
 				manifest.serverModIds());
