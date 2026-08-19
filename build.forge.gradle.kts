@@ -80,6 +80,13 @@ java {
 }
 
 tasks {
+	// Let the terminal talk to the dev server. Without this Gradle hands the game an empty
+	// stdin, so there is no way to type a command into a server you just started — and every
+	// server-side feature here is reached through one.
+	withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
+		standardInput = System.`in`
+	}
+
 	processResources {
 		fun MutableMap<String, String>.register(key: String, property: String) {
 			val value: String = sc.properties[property]
