@@ -204,6 +204,10 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
     "my-private-mod-1.0.jar": "https://example.com/my-private-mod-1.0.jar"
   },
   "bundleUrl": "",
+  "githubRepo": "",
+  "githubToken": "",
+  "githubReleaseTag": "automodfetcher-bundle",
+  "includeAuthorRestrictedMods": false,
   "includeServerOnlyMods": false,
   "includeSelf": false,
   "packName": "Server Modpack",
@@ -219,7 +223,10 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 | `curseforgeApiKey` | 只在有模組不在 Modrinth 上、或要匯出 CF 整合包時才需要 |
 | `excludeFileNames` | 不要通知客戶端的檔案，支援結尾 `*` 萬用字元 |
 | `manualUrls` | 兩個平台都查不到時，自己指定下載網址（key 是完整檔名）。**必須提供與伺服器上位元組完全相同的檔案**，否則客戶端驗證會失敗 |
-| `bundleUrl` | `/automodfetcher bundle` 打包出來的 zip 上傳後的**直接下載**網址。留空則不啟用。`manualUrls` 優先於它 |
+| `bundleUrl` | 打包出來的 zip 上傳後的**直接下載**網址。留空則不啟用。`manualUrls` 優先於它。設定 GitHub 後會自動填寫 |
+| `githubRepo` / `githubToken` | 填了就在 `/automodfetcher bundle` 時自動上傳到 release 並設定 `bundleUrl`。token 需要該 repo 的 Contents: read and write |
+| `githubReleaseTag` | 附件掛在哪個 release，預設 `automodfetcher-bundle`。沿用同一個，網址才不會每次改變 |
+| `includeAuthorRestrictedMods` | 預設 `false`。開啟後，作者關閉第三方下載的模組也會進包——**責任在你**，詳見上節 |
 | `includeServerOnlyMods` | 純伺服器端模組客戶端不需要，預設不送 |
 | `includeSelf` | 預設 false，避免要求客戶端替換正在執行中的自己。不影響整合包匯出 |
 | `packName` / `packVersion` | 匯出整合包時顯示的名稱與版本 |
@@ -234,10 +241,26 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 以前只能請玩家自己想辦法。現在可以打包成一個 zip 讓你自己上傳。
 
 ```
-/automodfetcher bundle              打包，並印出路徑與 SHA-512
-/automodfetcher bundle url <網址>   設定網址、重建清單、並確認玩家真的拿得到
-/automodfetcher bundle verify       重新確認一次（換過模組重新上傳後用）
+/automodfetcher bundle              打包（設定好 GitHub 的話：順便上傳並設定網址）
+/automodfetcher bundle url <網址>   自己上傳時用：貼網址，其餘自動完成
+/automodfetcher bundle verify       重新確認一次
 ```
+
+#### 最省事：讓它自己上傳
+
+在 `server.json` 填兩個欄位：
+
+```json
+"githubRepo": "你的帳號/你的repo",
+"githubToken": "github_pat_..."
+```
+
+token 用 fine-grained、只給那一個 repo 的 **Contents: read and write** 就夠了。之後 `/automodfetcher bundle`
+一行做完：打包 → 上傳到 release → 寫回 `bundleUrl` → 重建清單 → 抓回來確認。之後每次改模組
+重跑同一行就好，網址不會變（同名附件會被取代）。
+
+GitHub Releases 單檔上限 2 GiB，附件不計入 repo 容量，下載頻寬沒有公布的配額——對模組包等於無限。
+**token 是明文存在 `server.json` 裡**，這個檔案要當作機密看待（它不會被寫進 log）。
 
 流程：
 
@@ -265,11 +288,23 @@ zip 整包先驗 SHA-512，解壓後每個 jar 再驗一次。
 
 #### 什麼不會被打包
 
-**作者關閉第三方下載的模組不會進去**，即使它們同樣「無法自動下載」。
-那個設定就是作者說不要，自行轉載正是他們拒絕的那件事。這些模組玩家仍然會拿到連結，
-而且是指向**該版本的下載頁**而不是專案首頁。指令執行完會列出被略過的檔案。
+已經在 Modrinth 或 CurseForge 上的模組不會進去——它們照舊走官方 CDN。
 
-已經在 Modrinth 或 CurseForge 上的模組也不會進去——它們照舊走官方 CDN。
+**作者關閉第三方下載的模組，預設也不會進去。** 那個設定就是作者說不要。這些模組玩家仍然會拿到
+連結，而且是指向**該版本的下載頁**而不是專案首頁。
+
+這類模組有一條**作者允許的**自動安裝途徑：`/automodfetcher export curseforge` 產出的整合包
+用 projectID/fileID 指名它們，CurseForge App 有權替玩家下載。先試這條。
+
+真的需要覆蓋的話（例如你已經私訊問過作者並得到同意）：
+
+```json
+"includeAuthorRestrictedMods": true
+```
+
+預設 `false`。開啟後這些模組會進包，指令輸出與 log 每次都會**逐檔點名**是哪幾個。
+上傳是從你的帳號傳到你的空間，後果由你負責——這個開關存在是為了讓那個決定是明確的，
+而不是模組默默替你做掉。
 
 #### 換了模組要重打包
 

@@ -443,13 +443,18 @@ public class DownloadSession {
 	/** Streams one file to disk and returns its SHA-512, computed as it is written. */
 	private String fetch(Target target, Path temp) throws Exception {
 		String url = target.url();
+		String startUrl = url;
 
 		// Whatever a previous attempt managed to save. Asking for the rest turns a failure at
 		// 90% into a short top-up instead of starting the whole file again.
 		long alreadyHave = partialSize(temp, target.size());
 
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-			if (!policy.isAllowed(url)) {
+			// The first hop must be allowed outright; later ones are judged by where the
+			// download started, so a granted host can hand off to its own signed CDN address.
+			boolean allowed = hop == 0 ? policy.isAllowed(url) : policy.mayFollowFrom(startUrl, url);
+
+			if (!allowed) {
 				throw new BlockedHostException("Blocked host: " + ClientConfig.hostOf(url));
 			}
 

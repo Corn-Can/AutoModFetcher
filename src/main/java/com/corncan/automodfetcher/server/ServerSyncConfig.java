@@ -39,6 +39,41 @@ public class ServerSyncConfig {
 	 */
 	public String bundleUrl = "";
 
+	/**
+	 * Where to upload the bundle, as {@code owner/repo}. Leave blank to upload by hand.
+	 *
+	 * <p>GitHub Releases because it costs nothing, keeps files indefinitely, allows 2 GiB per
+	 * asset, and — the part that matters — the repository is yours. Nothing here hosts your
+	 * mods for you, and nothing here can take them down.
+	 */
+	public String githubRepo = "";
+
+	/**
+	 * A GitHub token with permission to write releases on {@link #githubRepo}.
+	 *
+	 * <p>A fine-grained token limited to that one repository with Contents: read and write is
+	 * enough; it never needs anything else. This file is worth protecting accordingly — the
+	 * token is never written to the log, but it is sitting here in plain text.
+	 */
+	public String githubToken = "";
+
+	/** The release the bundle is attached to. Reused, so old links keep working. */
+	public String githubReleaseTag = "automodfetcher-bundle";
+
+	/**
+	 * Whether to bundle mods whose authors switched off third-party downloads.
+	 *
+	 * <p>Off, and deliberately awkward to turn on. That switch is how an author says they do
+	 * not want their file redistributed, and CurseForge reports it by refusing to give out a
+	 * download URL at all. Turning this on overrides that, and the upload is made from your
+	 * account to your host: whatever follows is yours to answer for, not this mod's.
+	 *
+	 * <p>There is a supported route for these that needs no such decision — the CurseForge app
+	 * is allowed to fetch them, so {@code /automodfetcher export curseforge} produces a pack
+	 * that installs them properly. Try that first.
+	 */
+	public boolean includeAuthorRestrictedMods = false;
+
 	/** Server-side-only mods are pointless for clients to download, so they are skipped. */
 	public boolean includeServerOnlyMods = false;
 

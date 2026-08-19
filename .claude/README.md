@@ -90,13 +90,26 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
 
 第 5 道的邊界要說清楚：`SourcePolicy.needsConsent()` 會先過 scheme 檢查，所以**明文 http 不是可以
 同意的事**——沒有任何答案能讓「路徑上的人可以換掉 jar」變得安全。同意能放寬的只有「是誰在提供」，
-放寬不了「怎麼傳過來」。`TrustedSources` 也刻意與 `TrustedServers`（不再詢問）分開：
+放寬不了「怎麼傳過來」。
+
+**轉址的規則（`SourcePolicy.mayFollowFrom`）**：白名單來源仍然逐跳檢查，一如以往；但**已獲授權的
+host 可以轉址到任何 https 位址**。這是必須的，不是偷懶：GitHub release 會 302 到
+`release-assets.githubusercontent.com` 上一個**帶簽章、會過期**的網址，S3 presigned、Drive 全都
+一樣。伺服器沒辦法事先公布那個位址，所以若堅持逐跳白名單，「同意 github.com」就等於什麼都沒同意。
+放寬的只是「誰把位元組交給你」，而那從來不是完整性的保證——SHA-512 才是，而它照驗不誤。
+實測（`RedirectTest`）確認：github.com → 簽章位址的 302 會被跟隨、`Range` 續傳在轉址後仍回 206、
+未獲授權的 host 在第 0 跳就被拒、Modrinth CDN 不受影響。`TrustedSources` 也刻意與 `TrustedServers`（不再詢問）分開：
 信任一個伺服器安裝模組，跟信任它指名的網站，是兩件事，一個答案不能替另一個作答。
 
 另外，**刪除只針對本模組自己安裝過的檔案**（記錄在 `installed.json`）。玩家自行安裝的模組永遠不會被刪除。
 
 那條界線也劃出了一個真實的破口：伺服器換掉一個玩家當初手動裝的模組時，AMF 從頭到尾一句話都不會說。
 所以另外有一條「多餘模組」的路徑（見下節），它**搬走而不刪除**，而且要玩家在確認畫面上按下同意。
+
+伺服器端有一個對應的例外：`includeAuthorRestrictedMods`。作者關閉第三方下載的模組**預設不入包**，
+這個開關可以覆蓋。它預設關閉、每次打包都逐檔點名、並在輸出與 log 裡寫明責任歸屬。
+`BundleBuilder` 的 javadoc 有完整理由；重點是這個決定必須是管理員明確做出的，
+而不是模組默默替他做掉。
 
 ### 🧹 多餘模組（`SyncPlanner.findForeign`）
 
@@ -192,6 +205,7 @@ src/main/
       resolver/                     ModrinthResolver / CurseForgeResolver / ResolveCache / Resolution
       export/                       MrpackExporter / CurseForgePackExporter
                                     DirectLink（把瀏覽器上的分享頁網址改成直接下載網址）
+                                    GitHubRelease（上傳 bundle 到管理員自己的 repo release）
                                     BundleBuilder（打包無平台收錄的模組，固定時間戳以確保可重現）
                                     BundleVerifier（抓一次 bundleUrl，確認玩家拿到的就是這份）
     client/

@@ -38,10 +38,14 @@ import com.google.gson.JsonObject;
  *
  * <p>This is the only place in the mod that puts someone else's jar inside a file it hands
  * out, so what goes in is drawn as narrowly as it can be: a mod is eligible only when both
- * Modrinth and CurseForge came back with nothing at all. A mod whose author switched off
- * third-party downloads has a page, and that page is the author saying no — it is reported as
- * skipped rather than quietly swept in. Everything either platform can serve keeps going
- * through its own CDN, where it belongs.
+ * Modrinth and CurseForge came back with nothing at all. Everything either platform can serve
+ * keeps going through its own CDN, where it belongs.
+ *
+ * <p>A mod whose author switched off third-party downloads has a page, and that page is the
+ * author saying no, so it is skipped and reported. {@code includeAuthorRestrictedMods} exists
+ * for the operator who has a reason to override that — permission from the author, most
+ * obviously. It is off by default, it names every file it sweeps in, and it says out loud
+ * whose decision it now is: the upload comes from their account to their host.
  *
  * <p>The zip is written deterministically. Rebuilding it from an unchanged mods folder has to
  * produce the same bytes, because the copy this server hashes and the copy the operator
@@ -61,10 +65,11 @@ public final class BundleBuilder {
 	}
 
 	/**
-	 * @param skippedWithheld mods left out because their author disabled third-party downloads
+	 * @param withheld     mods whose author disabled third-party downloads
+	 * @param overrodeWithheld whether those went in anyway, because the operator said so
 	 */
 	public record Result(Path file, String sha512, long size, List<BundledMod> contents,
-			List<String> skippedWithheld) {
+			List<String> withheld, boolean overrodeWithheld) {
 	}
 
 	public static Path bundleFile() {
@@ -85,15 +90,26 @@ public final class BundleBuilder {
 	 * to pack and delete the zip out from under a working server.
 	 */
 	public static Result build(ModManifest manifest, ServerSyncConfig config) throws IOException {
+		boolean overriding = config.includeAuthorRestrictedMods;
+
 		List<String> withheld = manifest.unresolved().stream()
 				.filter(ManualEntry::hasPage)
 				.map(ManualEntry::fileName)
 				.toList();
 
 		Set<String> wanted = manifest.unresolved().stream()
-				.filter(entry -> !entry.hasPage())
+				.filter(entry -> overriding || !entry.hasPage())
 				.map(entry -> entry.fileName().toLowerCase(Locale.ROOT))
 				.collect(Collectors.toCollection(java.util.HashSet::new));
+
+		if (overriding && !withheld.isEmpty()) {
+			// Named individually and every single time. A switch buried in a config file is
+			// easy to forget; a list of the specific mods being redistributed is not.
+			AutoModFetcher.LOGGER.warn("includeAuthorRestrictedMods is on, so the bundle will carry "
+					+ "{} mod(s) whose authors disabled third-party downloads: {}. That is your call "
+					+ "to answer for, not this mod's. /automodfetcher export curseforge installs these "
+					+ "the way their authors allow.", withheld.size(), String.join(", ", withheld));
+		}
 
 		manifest.bundles().forEach(bundle -> bundle.contents()
 				.forEach(mod -> wanted.add(mod.fileName().toLowerCase(Locale.ROOT))));
@@ -111,7 +127,7 @@ public final class BundleBuilder {
 		if (mods.isEmpty()) {
 			// A leftover zip would go on advertising mods that are no longer here.
 			Files.deleteIfExists(target);
-			return new Result(target, "", 0, List.of(), withheld);
+			return new Result(target, "", 0, List.of(), withheld, overriding);
 		}
 
 		List<BundledMod> contents = new ArrayList<>();
@@ -126,7 +142,8 @@ public final class BundleBuilder {
 		Hashing.FileHashes hashes = Hashing.hash(target);
 		AutoModFetcher.LOGGER.info("Packed {} mod(s) into {}", contents.size(), target);
 
-		return new Result(target, hashes.sha512(), hashes.size(), List.copyOf(contents), withheld);
+		return new Result(target, hashes.sha512(), hashes.size(), List.copyOf(contents), withheld,
+				overriding);
 	}
 
 	/**

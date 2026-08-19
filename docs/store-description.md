@@ -39,11 +39,11 @@ If a mod cannot be downloaded automatically, you get a clickable link to its off
 Mods are matched against Modrinth by hash, then by name and version. Even if you downloaded a `.jar` from CurseForge, AutoModFetcher will resolve it. 
 (A CurseForge API key is optional, needed only for exclusive mods)
 
-⚖️ **Respectful by Design:**
-Other people's mods are never rehosted — the manifest only sends secure platform URLs. If an author disables third-party downloads, that is honoured, and no bundle can include their file.
+⚖️ **Respectful by Default:**
+Other people's mods are never rehosted — the manifest only sends secure platform URLs. An author who disables third-party downloads is honoured: their file is left out of bundles and players are pointed at it instead. There is a switch to override that, off unless you turn it on, and it names every file it includes — because that is your decision to answer for, not the mod's.
 
 📦 **Ship Your Own Mods:**
-`/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of — into a single zip. Upload it anywhere, then `/automodfetcher bundle url <address>` with the link copied straight from your browser: Google Drive, Dropbox and GitHub share pages are corrected for you, and the server fetches it back to prove players will actually get it.
+`/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of — into a single zip. Give it a GitHub repository and a token and that one command also uploads it, sets the address and fetches it back to prove players can reach it. Prefer to host elsewhere? Upload it yourself and paste the link straight from your browser with `/automodfetcher bundle url` — Drive, Dropbox and GitHub share pages are corrected for you.
 
 🗃️ **One-Command Modpacks:**
 Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and CurseForge zip formats.
@@ -64,7 +64,7 @@ Use `/automodfetcher reload` to rebuild the manifest without restarting the serv
 
 *   **Installation:** Must be installed on **both** the Server and the Client.
 *   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code — **one** restart. Removals are finished off by a tiny helper once the game has closed, so the folder is already correct when you reopen it. Nothing relaunches the game for you: that is unreliable under launchers that supervise their own processes, and a new instance would only race the cleanup. Close, reopen, play. When files are removed or set aside, that takes effect one launch later still — AutoModFetcher notices and asks for the extra restart rather than letting you join into a failure.
-*   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that — such mods are excluded from bundles, and players receive a direct link to that exact file version instead.
+*   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that by default — such mods are excluded from bundles, and players receive a direct link to that exact file version instead. `/automodfetcher export curseforge` is the route that installs them the way their authors allow.
 *   **File Deletion:** Removed mods are deleted on the *next* launch, as Java locks running `.jar` files.
 ---
 > **Licence:** All Rights Reserved. Free to use (including on commercial servers) and free to include in modpacks/server packs with credit. Standalone redistribution is not permitted.

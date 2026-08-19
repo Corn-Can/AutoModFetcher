@@ -53,10 +53,38 @@ public record SourcePolicy(ClientConfig config, Set<String> grantedHosts) {
 		return config.isSchemeAllowed(url) && !config.isHostAllowedFor(url) && !isGranted(url);
 	}
 
-	private boolean isGranted(String url) {
+	/**
+	 * Whether this server was granted this host by the player.
+	 *
+	 * <p>Public because a redirect has to be judged by where it started, not only by where it
+	 * points. See {@link #mayFollowFrom}.
+	 */
+	public boolean isGranted(String url) {
 		String host = ClientConfig.hostOf(url);
 
 		return host != null && grantedHosts.contains(host.toLowerCase(Locale.ROOT));
+	}
+
+	/**
+	 * Whether a download that began at {@code startUrl} may follow a redirect to {@code url}.
+	 *
+	 * <p>Hosts the player granted are allowed to redirect anywhere over https, and they have
+	 * to be: a release asset, a presigned bucket URL, any real file host hands out a signed
+	 * address on a different domain that expires too quickly for a server to have published
+	 * it in advance. Refusing those would make consent mean nothing.
+	 *
+	 * <p>Nothing is given away by this. The allow list answers "who may a server send me to",
+	 * and for this host the player has answered it; what actually guarantees the bytes is the
+	 * SHA-512, which is checked no matter who served them. Downloads from the standing platform
+	 * list are unaffected and still have every hop checked, because they were never granted to
+	 * anyone in the first place.
+	 */
+	public boolean mayFollowFrom(String startUrl, String url) {
+		if (isAllowed(url)) {
+			return true;
+		}
+
+		return isGranted(startUrl) && config.isSchemeAllowed(url);
 	}
 
 	/** A copy that also trusts these hosts, for the moment the player agrees to them. */

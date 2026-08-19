@@ -9,6 +9,7 @@ import com.corncan.automodfetcher.server.export.BundleBuilder;
 import com.corncan.automodfetcher.server.export.BundleVerifier;
 import com.corncan.automodfetcher.server.export.CurseForgePackExporter;
 import com.corncan.automodfetcher.server.export.DirectLink;
+import com.corncan.automodfetcher.server.export.GitHubRelease;
 import com.corncan.automodfetcher.server.export.MrpackExporter;
 import com.corncan.automodfetcher.util.ModPaths;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -80,6 +81,40 @@ public final class AutoModFetcherCommand {
 			BundleBuilder.Result result = BundleBuilder.build(manifest, config);
 
 			server.execute(() -> reportBundle(source, result, config));
+
+			if (result.contents().isEmpty() || config.githubRepo.isBlank()
+					|| config.githubToken.isBlank()) {
+				return;
+			}
+
+			// Uploading is the step people stop before, and a bundle nobody published is
+			// invisible: the server carries on telling players to install by hand.
+			server.execute(() -> source.sendSuccess(
+					() -> Component.translatable("automodfetcher.command.bundle_uploading",
+							config.githubRepo), false));
+
+			GitHubRelease.Result upload = GitHubRelease.upload(config.githubRepo, config.githubToken,
+					config.githubReleaseTag, result.file());
+
+			config.bundleUrl = upload.downloadUrl();
+			config.save();
+
+			ServerNetworking.rebuild();
+
+			ModBundle published = BundleBuilder.describe(upload.downloadUrl());
+			BundleVerifier.Result verdict = published == null
+					? null
+					: BundleVerifier.verify(published);
+
+			server.execute(() -> {
+				source.sendSuccess(() -> Component.literal(
+						(upload.replacedExisting() ? "Replaced the bundle at " : "Uploaded to ")
+								+ upload.downloadUrl()).withStyle(ChatFormatting.AQUA), true);
+
+				if (published != null && verdict != null) {
+					reportVerdict(source, published, verdict);
+				}
+			});
 		});
 
 		return 1;
@@ -91,7 +126,7 @@ public final class AutoModFetcherCommand {
 		if (result.contents().isEmpty()) {
 			source.sendSuccess(() -> Component.literal("Nothing to bundle: every mod on this server "
 					+ "is available from Modrinth or CurseForge.").withStyle(ChatFormatting.GREEN), true);
-			warnAbout(source, result.skippedWithheld(),
+			warnAbout(source, result.withheld(),
 					" cannot be bundled — their authors disabled third-party downloads. "
 							+ "Players get a link to those instead: ");
 			return;
@@ -103,9 +138,24 @@ public final class AutoModFetcherCommand {
 		source.sendSuccess(() -> Component.literal("SHA-512 " + result.sha512()).withStyle(ChatFormatting.DARK_GRAY),
 				false);
 
-		warnAbout(source, result.skippedWithheld(),
-				" were left out — their authors disabled third-party downloads, so hosting them "
-						+ "yourself is the one thing they opted out of. Players get a link instead: ");
+		if (!result.overrodeWithheld()) {
+			warnAbout(source, result.withheld(),
+					" were left out — their authors disabled third-party downloads, so hosting them "
+							+ "yourself is the one thing they opted out of. Players get a link instead, "
+							+ "and /automodfetcher export curseforge installs them properly: ");
+		}
+
+		if (result.overrodeWithheld() && !result.withheld().isEmpty()) {
+			source.sendSuccess(() -> Component.literal(result.withheld().size()
+					+ " mod(s) whose authors disabled third-party downloads were included because "
+					+ "includeAuthorRestrictedMods is on: " + String.join(", ", result.withheld())
+					+ ". That is your decision to answer for.").withStyle(ChatFormatting.RED), false);
+		}
+
+		// Nothing more to say when the upload is about to handle the rest of it.
+		if (!config.githubRepo.isBlank() && !config.githubToken.isBlank()) {
+			return;
+		}
 
 		// The zip on its own does nothing. Saying the next step here is the difference between
 		// a feature and a file sitting in a folder.
