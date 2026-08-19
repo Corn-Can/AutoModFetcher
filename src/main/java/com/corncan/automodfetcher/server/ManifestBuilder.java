@@ -47,6 +47,9 @@ public final class ManifestBuilder {
 		ResolveCache cache = ResolveCache.load();
 		Map<String, Resolution> resolved = new HashMap<>();
 		Map<String, String> pages = new HashMap<>();
+		// Only CurseForge ever reports a refusal, and only during the run that asked: the cache
+		// deliberately never stores those, so a remembered page is always the harmless kind.
+		Set<String> restricted = new HashSet<>();
 		List<ScannedMod> needLookup = new ArrayList<>();
 
 		for (ScannedMod mod : mods) {
@@ -76,7 +79,7 @@ public final class ManifestBuilder {
 		}
 
 		if (!needLookup.isEmpty()) {
-			lookUpOnPlatforms(config, needLookup, resolved, cache, pages);
+			lookUpOnPlatforms(config, needLookup, resolved, cache, pages, restricted);
 		}
 
 		Set<String> knownSha1 = new HashSet<>();
@@ -84,7 +87,7 @@ public final class ManifestBuilder {
 		cache.retainOnly(knownSha1);
 		cache.save();
 
-		return attachBundle(assemble(mods, resolved, pages), config);
+		return attachBundle(assemble(mods, resolved, pages, restricted), config);
 	}
 
 	/**
@@ -95,8 +98,12 @@ public final class ManifestBuilder {
 	 * that is about to arrive on its own.
 	 */
 	private static ModManifest attachBundle(ModManifest manifest, ServerSyncConfig config) {
+		// Everything a bundle is allowed to carry: no download anywhere, and nobody refusing.
+		// Having a page is not a refusal — Modrinth hands one out for any project it knows,
+		// including for a build it does not carry, and treating that as forbidden left mods
+		// that only ever needed bundling stuck on "install this yourself" for good.
 		List<String> unknown = manifest.unresolved().stream()
-				.filter(entry -> !entry.hasPage())
+				.filter(entry -> !entry.restricted())
 				.map(ManualEntry::fileName)
 				.toList();
 
@@ -111,17 +118,31 @@ public final class ManifestBuilder {
 		}
 
 		if (bundle == null) {
-			// Nothing to offer. Which advice helps depends on why, and the two reasons want
-			// opposite things said.
+			// Nothing to offer, and the useful advice depends entirely on why. Telling someone
+			// who has just packed an 800 KB bundle to go and pack one is how a real problem
+			// gets mistaken for the feature not working.
 			if (!unknown.isEmpty()) {
-				AutoModFetcher.LOGGER.warn(
-						"No platform carries: {}. Run /automodfetcher bundle — anything under {} bytes "
-								+ "is sent to players over the connection with nothing to host. Larger "
-								+ "than that, upload the zip and run /automodfetcher bundle url, or put "
-								+ "a GitHub token in config/{}/{}. Until then players are asked to "
-								+ "install these by hand.",
-						String.join(", ", unknown), config.maxEmbeddedBundleBytes,
-						AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
+				long packed = BundleBuilder.bundleSize();
+
+				if (packed > config.maxEmbeddedBundleBytes && url.isBlank()) {
+					AutoModFetcher.LOGGER.warn(
+							"The bundle is packed and holds {}, but at {} bytes it is over "
+									+ "maxEmbeddedBundleBytes ({}), so it cannot travel with the mod "
+									+ "list. Upload it and run /automodfetcher bundle url, or put a "
+									+ "GitHub token in config/{}/{}. Raising the limit will not help "
+									+ "much: the packet it would ride in caps out near 1 MiB.",
+							String.join(", ", unknown), packed, config.maxEmbeddedBundleBytes,
+							AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
+				} else {
+					AutoModFetcher.LOGGER.warn(
+							"No platform carries: {}. Run /automodfetcher bundle — anything under {} "
+									+ "bytes is sent to players over the connection with nothing to "
+									+ "host. Larger than that, upload the zip and run /automodfetcher "
+									+ "bundle url, or put a GitHub token in config/{}/{}. Until then "
+									+ "players are asked to install these by hand.",
+							String.join(", ", unknown), config.maxEmbeddedBundleBytes,
+							AutoModFetcher.MOD_ID, ServerSyncConfig.FILE_NAME);
+				}
 			}
 
 			return manifest;
@@ -180,12 +201,48 @@ public final class ManifestBuilder {
 					bundle.url());
 		}
 
-		return new ModManifest(manifest.entries(), List.copyOf(stillManual), List.of(bundle),
-				manifest.serverModIds());
+		ModManifest offered = new ModManifest(manifest.entries(), List.copyOf(stillManual),
+				List.of(bundle), manifest.serverModIds());
+
+		// An embedded bundle shares one packet with everything else in the list, and that packet
+		// has a hard ceiling. Measuring the finished thing is the only honest check: the limit
+		// on the zip alone cannot know how many entries are sitting beside it. Overflowing would
+		// not degrade gracefully — it would break the login every player makes.
+		if (bundle.isEmbedded() && tooBigToSend(offered)) {
+			AutoModFetcher.LOGGER.error("The mod list plus the embedded bundle would not fit in one "
+					+ "packet, so the bundle is not being offered. Upload it and run "
+					+ "/automodfetcher bundle url, or lower maxEmbeddedBundleBytes.");
+			return manifest;
+		}
+
+		return offered;
 	}
 
+	/**
+	 * Whether a manifest would exceed what a login query packet can carry.
+	 *
+	 * <p>Vanilla caps that payload at a mebibyte and drops the connection over it, so this is
+	 * measured rather than estimated, with room left for the framing around it.
+	 */
+	private static boolean tooBigToSend(ModManifest manifest) {
+		io.netty.buffer.ByteBuf buffer = io.netty.buffer.Unpooled.buffer();
+
+		try {
+			net.minecraft.network.FriendlyByteBuf out = new net.minecraft.network.FriendlyByteBuf(buffer);
+			manifest.write(out);
+
+			return out.readableBytes() > MAX_MANIFEST_BYTES;
+		} finally {
+			buffer.release();
+		}
+	}
+
+	/** A mebibyte is the packet limit; the rest is headroom for everything wrapping it. */
+	private static final int MAX_MANIFEST_BYTES = 1_000_000;
+
 	private static void lookUpOnPlatforms(ServerSyncConfig config, List<ScannedMod> needLookup,
-			Map<String, Resolution> resolved, ResolveCache cache, Map<String, String> pages) {
+			Map<String, Resolution> resolved, ResolveCache cache, Map<String, String> pages,
+			Set<String> restricted) {
 		HttpClient http = HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(15))
 				.followRedirects(HttpClient.Redirect.NORMAL)
@@ -223,8 +280,11 @@ public final class ManifestBuilder {
 			CurseForgeResolver.Result curseForge = CurseForgeResolver.resolve(http, config.curseforgeApiKey,
 					fingerprint(stillMissing));
 			resolved.putAll(curseForge.resolved());
-			// A CurseForge page beats a Modrinth one here: this file came from CurseForge.
+			// A CurseForge page beats a Modrinth one here: this file came from CurseForge. It
+			// also means something a Modrinth page does not — the author said no — so this is
+			// the only thing that ever marks a file as refused.
 			pages.putAll(curseForge.blockedPages());
+			restricted.addAll(curseForge.blockedPages().keySet());
 		}
 
 		for (ScannedMod mod : needLookup) {
@@ -253,7 +313,7 @@ public final class ManifestBuilder {
 	}
 
 	private static ModManifest assemble(List<ScannedMod> mods, Map<String, Resolution> resolved,
-			Map<String, String> pages) {
+			Map<String, String> pages, Set<String> restricted) {
 		List<ModEntry> entries = new ArrayList<>();
 		List<ManualEntry> unresolved = new ArrayList<>();
 
@@ -263,7 +323,8 @@ public final class ManifestBuilder {
 			Resolution resolution = resolved.get(mod.sha1());
 
 			if (resolution == null) {
-				unresolved.add(ManualEntry.of(mod.fileName(), mod.sha512(), pages.get(mod.sha1())));
+				unresolved.add(ManualEntry.of(mod.fileName(), mod.sha512(), pages.get(mod.sha1()),
+						restricted.contains(mod.sha1())));
 				continue;
 			}
 
@@ -293,7 +354,7 @@ public final class ManifestBuilder {
 
 		// Files no platform carries are reported by attachBundle instead, which knows whether
 		// there is a bundle to put them in and so can name the right way out.
-		List<ManualEntry> withheld = unresolved.stream().filter(ManualEntry::hasPage).toList();
+		List<ManualEntry> withheld = unresolved.stream().filter(ManualEntry::restricted).toList();
 
 		for (ManualEntry entry : withheld) {
 			AutoModFetcher.LOGGER.warn(

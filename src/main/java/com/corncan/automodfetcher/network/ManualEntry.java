@@ -13,11 +13,20 @@ import net.minecraft.network.FriendlyByteBuf;
  * is not good enough: a browser download of an existing name becomes "mod (1).jar", and the
  * player would be nagged forever about a mod already sitting in their folder.
  *
+ * <p>{@code restricted} is the difference between "nobody will serve this" and "we could not
+ * find it". Only one platform ever says the first: CurseForge answers with no download URL
+ * when an author has switched off third-party downloads. A Modrinth page, by contrast, is
+ * attached whenever the <em>project</em> exists, which happens constantly for a build Modrinth
+ * simply does not carry — a private build, a bugfix, a version pulled from elsewhere. Reading
+ * a page as a refusal would take every one of those and treat it as forbidden, which is how a
+ * mod that only needed bundling ends up permanently listed as "install this yourself".
+ *
  * @param pageUrl empty when no page is known
  */
-public record ManualEntry(String fileName, String sha512, String pageUrl) {
-	public static ManualEntry of(String fileName, String sha512, String pageUrl) {
-		return new ManualEntry(fileName, sha512 == null ? "" : sha512, pageUrl == null ? "" : pageUrl);
+public record ManualEntry(String fileName, String sha512, String pageUrl, boolean restricted) {
+	public static ManualEntry of(String fileName, String sha512, String pageUrl, boolean restricted) {
+		return new ManualEntry(fileName, sha512 == null ? "" : sha512,
+				pageUrl == null ? "" : pageUrl, restricted);
 	}
 
 	public boolean hasPage() {
@@ -28,9 +37,10 @@ public record ManualEntry(String fileName, String sha512, String pageUrl) {
 		buf.writeUtf(fileName);
 		buf.writeUtf(sha512);
 		buf.writeUtf(pageUrl);
+		buf.writeBoolean(restricted);
 	}
 
 	public static ManualEntry read(FriendlyByteBuf buf) {
-		return new ManualEntry(buf.readUtf(), buf.readUtf(), buf.readUtf());
+		return new ManualEntry(buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readBoolean());
 	}
 }

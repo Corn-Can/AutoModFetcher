@@ -78,7 +78,7 @@ public class ServerSyncConfig {
 	 * player and the packet it rides in is capped at a mebibyte regardless. Set it to 0 to
 	 * always require hosting.
 	 */
-	public long maxEmbeddedBundleBytes = 768 * 1024;
+	public long maxEmbeddedBundleBytes = 900 * 1024;
 
 	/** The release the bundle is attached to. Reused, so old links keep working. */
 	public String githubReleaseTag = "automodfetcher-bundle";

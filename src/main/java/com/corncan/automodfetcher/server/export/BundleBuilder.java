@@ -76,6 +76,17 @@ public final class BundleBuilder {
 		return ModPaths.configDir().resolve("bundle").resolve("mods-bundle.zip");
 	}
 
+	/** The packed bundle's size, or -1 when none has been built. */
+	public static long bundleSize() {
+		try {
+			Path file = bundleFile();
+
+			return Files.isRegularFile(file) ? Files.size(file) : -1;
+		} catch (IOException e) {
+			return -1;
+		}
+	}
+
 	/**
 	 * Packs everything in {@code manifest.unresolved()} that no platform knows about.
 	 *
@@ -93,12 +104,14 @@ public final class BundleBuilder {
 		boolean overriding = config.includeAuthorRestrictedMods;
 
 		List<String> withheld = manifest.unresolved().stream()
-				.filter(ManualEntry::hasPage)
+				.filter(ManualEntry::restricted)
 				.map(ManualEntry::fileName)
 				.toList();
 
+		// A page is not a refusal. Only CurseForge reporting no download URL is, and that is
+		// what restricted() means; a Modrinth link just says the project exists.
 		Set<String> wanted = manifest.unresolved().stream()
-				.filter(entry -> overriding || !entry.hasPage())
+				.filter(entry -> overriding || !entry.restricted())
 				.map(entry -> entry.fileName().toLowerCase(Locale.ROOT))
 				.collect(Collectors.toCollection(java.util.HashSet::new));
 

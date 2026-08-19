@@ -58,8 +58,15 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
 *   清單只在**伺服器啟動時於背景執行緒建構一次**，之後每位玩家連線直接送快取結果。
 *   **兩個平台都查不到的檔案**（`unresolved` 且無 `pageUrl`）可由 `/automodfetcher bundle` 打包成
     一個 zip。`ManifestBuilder.attachBundle()` 會把這些檔案從 `unresolved` 移出、改掛在
-    `ModBundle` 上。作者關閉第三方下載的（有 `pageUrl`）預設不入包，
-    見 `includeAuthorRestrictedMods`。
+    `ModBundle` 上。作者關閉第三方下載的預設不入包，見 `includeAuthorRestrictedMods`。
+*   **`ManualEntry.restricted` 與 `hasPage()` 是兩件事**，混為一談會產生很難看出來的 bug。
+    `restricted` 只有 CurseForge 回傳空 `downloadUrl` 時才為 true——那是作者的拒絕。
+    `pageUrl` 則是 Modrinth 對**任何存在的專案**都會附上的連結，包含它沒有收錄這個建置的情況
+    （自製版、bugfix 版、從別處拿的版本）。曾經用 `hasPage()` 當作「被拒絕」的判準，
+    結果是這類模組永遠進不了 bundle、永遠顯示「請自行安裝」，而 log 還宣稱是作者不允許。
+*   `attachBundle` 最後會**把序列化後的 manifest 量一次**（`tooBigToSend`）。
+    embedded bundle 跟所有 entry 共用同一個封包，而那個封包有硬上限；
+    只看 zip 大小不知道旁邊還有多少 entry，撐爆的話壞的是每個人的登入。
 *   **`ModBundle` 有兩種形態**：`hosted()` 帶網址、`embedded()` 帶位元組。
     小於 `maxEmbeddedBundleBytes`（預設 768 KB）且沒設 `bundleUrl` 時走 embedded——
     zip 直接塞進 manifest 封包，隨登入查詢送到客戶端。

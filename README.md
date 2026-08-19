@@ -204,7 +204,7 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
     "my-private-mod-1.0.jar": "https://example.com/my-private-mod-1.0.jar"
   },
   "bundleUrl": "",
-  "maxEmbeddedBundleBytes": 786432,
+  "maxEmbeddedBundleBytes": 921600,
   "githubRepo": "",
   "githubToken": "",
   "githubReleaseTag": "automodfetcher-bundle",
@@ -224,7 +224,7 @@ manualUrls 設定  →  本地快取  →  Modrinth（雜湊）  →  Modrinth�
 | `curseforgeApiKey` | 只在有模組不在 Modrinth 上、或要匯出 CF 整合包時才需要 |
 | `excludeFileNames` | 不要通知客戶端的檔案，支援結尾 `*` 萬用字元 |
 | `manualUrls` | 兩個平台都查不到時，自己指定下載網址（key 是完整檔名）。**必須提供與伺服器上位元組完全相同的檔案**，否則客戶端驗證會失敗 |
-| `maxEmbeddedBundleBytes` | 小於這個大小的 bundle 直接隨連線送給玩家，完全不用上傳。預設 768 KB，設 0 則一律要求網址 |
+| `maxEmbeddedBundleBytes` | 小於這個大小的 bundle 直接隨連線送給玩家，完全不用上傳。預設 900 KB，設 0 則一律要求網址。**上限來自封包本身（約 1 MiB），調高幫助有限**；超過就該用上傳 |
 | `bundleUrl` | 超過上限時，zip 上傳後的**直接下載**網址。`manualUrls` 優先於它。設定 GitHub 後會自動填寫 |
 | `githubRepo` / `githubToken` | 填了就在 `/automodfetcher bundle` 時自動上傳到 release 並設定 `bundleUrl`。token 需要該 repo 的 Contents: read and write |
 | `githubReleaseTag` | 附件掛在哪個 release，預設 `automodfetcher-bundle`。沿用同一個，網址才不會每次改變 |
@@ -278,7 +278,7 @@ GitHub Releases 單檔上限 2 GiB，附件不計入 repo 容量，下載頻寬�
 /automodfetcher bundle
 ```
 
-**這樣就好了。** 只要打包出來的 zip 小於 `maxEmbeddedBundleBytes`（預設 768 KB），
+**這樣就好了。** 只要打包出來的 zip 小於 `maxEmbeddedBundleBytes`（預設 900 KB），
 它會**直接隨伺服器的回應送給玩家**——不用雲端、不用帳號、不用開連接埠、不用填任何網址。
 自製模組通常只有幾百 KB，這條路涵蓋絕大多數情況。
 
@@ -319,6 +319,11 @@ zip 整包先驗 SHA-512，解壓後每個 jar 再驗一次。
 
 **作者關閉第三方下載的模組，預設也不會進去。** 那個設定就是作者說不要。這些模組玩家仍然會拿到
 連結，而且是指向**該版本的下載頁**而不是專案首頁。
+
+判斷依據只有一個：**CurseForge 回傳空的下載網址**。Modrinth 給的專案連結**不算**——
+那只代表「這個模組在 Modrinth 上有專案頁」，而伺服器上這個建置它沒有收錄（自製版、bugfix 版、
+從別處拿的版本都會這樣）。把那種情況當成「作者拒絕」的話，一個原本只需要打包的模組會被永遠
+卡在「請自行安裝」。
 
 這類模組有一條**作者允許的**自動安裝途徑：`/automodfetcher export curseforge` 產出的整合包
 用 projectID/fileID 指名它們，CurseForge App 有權替玩家下載。先試這條。
