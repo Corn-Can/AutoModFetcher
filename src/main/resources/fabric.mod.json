@@ -7,7 +7,11 @@
 	"authors": [
 		"CornCan"
 	],
-	"contact": {},
+	"contact": {
+		"homepage": "https://github.com/Corn-Can/AutoModFetcher",
+		"issues": "https://github.com/Corn-Can/AutoModFetcher/issues",
+		"sources": "https://github.com/Corn-Can/AutoModFetcher"
+	},
 	"license": "ARR",
 	"icon": "assets/automodfetcher/icon.png",
 	"environment": "*",
