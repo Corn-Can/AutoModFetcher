@@ -18,13 +18,26 @@
 | CurseForge App | CurseForge 格式的 `.zip` |
 | **官方 Minecraft 啟動器** | **沒有整合包功能，走下面那條** |
 
-### 官方啟動器：手動裝三樣東西
+### 官方啟動器：手動安裝
 
-官方啟動器不支援任何整合包格式，所以這三步得自己來：
+官方啟動器不支援任何整合包格式，所以得自己來。動手之前先問管理員一件事：
+**伺服器跑的是哪個 Minecraft 版本、哪個 loader。** 底下每一步都取決於那個答案。
 
-1. **Fabric Loader** — 用[官方安裝程式](https://fabricmc.net/use/installer/)，版本選 **1.20.1**
-2. **Fabric API** — 從 [Modrinth](https://modrinth.com/mod/fabric-api) 下載 1.20.1 版，放進 `mods/`
-3. **AutoModFetcher** — 把 `automodfetcher-x.y.z.jar` 放進 `mods/`
+**1. 裝 loader** — 照伺服器用的那個選：
+
+| 伺服器跑的 | 你要裝的 |
+|---|---|
+| Fabric 1.20.1 或 1.21.1 | [Fabric 安裝程式](https://fabricmc.net/use/installer/)，版本選對 |
+| Forge 1.20.1 | [Forge 安裝程式](https://files.minecraftforge.net/net/minecraftforge/forge/index_1.20.1.html) |
+| NeoForge 1.21.1 | [NeoForge 安裝程式](https://neoforged.net/) |
+
+**2. Fabric API — 只有 Fabric 需要。** 從 [Modrinth](https://modrinth.com/mod/fabric-api)
+下載對應你 Minecraft 版本的那一版，放進 `mods/`。Forge 與 NeoForge 不必，這個模組在那兩邊
+沒有額外相依。
+
+**3. AutoModFetcher** — 放進 `mods/`。檔名的形狀是
+`automodfetcher-<loader>-<版本>+<Minecraft 版本>.jar`，四個目標各一個，拿對應你伺服器的
+那一份就好——例如 NeoForge 1.21.1 的伺服器要的是 `automodfetcher-neoforge-0.1.0+1.21.1.jar`。
 
 `mods/` 資料夾通常在 `%APPDATA%\.minecraft\mods`（Windows）。裝好之後就全自動了。
 
@@ -114,7 +127,10 @@ AMF 改成在遊戲關閉時交給一個極小的獨立程序：它等這個遊�
 
 ### 安裝
 
-把 `automodfetcher-x.y.z.jar` 和 **Fabric API** 放進伺服器的 `mods/`，啟動一次，設定檔會自動生成在 `config/automodfetcher/`。
+把對應你伺服器 loader 與 Minecraft 版本的 `automodfetcher-*.jar` 放進伺服器的 `mods/`，
+啟動一次，設定檔會自動生成在 `config/automodfetcher/`。
+
+**Fabric 伺服器還需要 Fabric API**，Forge 與 NeoForge 不需要。
 
 ### 用「開放給區域網路」或 Essential 邀朋友
 
@@ -166,8 +182,11 @@ AMF 改成在遊戲關閉時交給一個極小的獨立程序：它等這個遊�
 
 官方啟動器**沒有整合包這個功能**，所以上面兩個檔案對他們沒用。他們只能：
 
-1. 用 [Fabric 官方安裝程式](https://fabricmc.net/use/installer/)裝 Loader
-2. 手動放入 Fabric API 與 AutoModFetcher 兩個 jar
+1. 用該 loader 的官方安裝程式裝好 loader
+   （[Fabric](https://fabricmc.net/use/installer/)、
+   [Forge](https://files.minecraftforge.net/net/minecraftforge/forge/index_1.20.1.html)、
+   [NeoForge](https://neoforged.net/)）
+2. 手動放入 AutoModFetcher 的 jar——Fabric 的話再加上 Fabric API
 3. 之後就全自動了
 
 值得在你的說明裡提醒他們：**在啟動器的「安裝檔」設定裡指定獨立的遊戲目錄**。否則伺服器的模組會裝進共用的 `.minecraft`，跟著出現在他們所有的單人存檔裡。模組偵測到這個情況時會在畫面上提醒一句。
@@ -360,13 +379,16 @@ zip 是照打包當下的 `mods/` 內容做的。之後你增刪模組，要重�
 
 | 管道 | 玩家要做幾件事 |
 |---|---|
-| 你提供的整合包 | **匯入一次**，Fabric API 與本模組都在裡面 |
-| Modrinth / CurseForge 的 app | 安裝本模組，平台會一併處理 Fabric API 相依 |
-| 官方啟動器 | 裝 Fabric，再手動放兩個 jar |
+| 你提供的整合包 | **匯入一次**，loader、本模組、以及 Fabric 伺服器所需的 Fabric API 都在裡面 |
+| Modrinth / CurseForge 的 app | 安裝本模組，平台會一併處理相依 |
+| 官方啟動器 | 裝 loader，再手動放 jar |
 
-**上架時記得在平台專案頁面把 Fabric API 設成 required dependency。** 那是平台層的設定，jar 裡的宣告不會自動同步過去。
+**上架時記得在平台專案頁面設定相依：Fabric 的那兩個檔案要把 Fabric API 標成 required
+dependency。** 那是平台層的設定，jar 裡的宣告不會自動同步過去。Forge 與 NeoForge 的檔案
+沒有這個需求，別一併加上去——那會讓那兩邊的玩家被要求安裝一個他們用不到的東西。
 
-只有官方啟動器的玩家需要手動放 jar。如果那群人佔比高，可以在說明裡附一個含這兩個 jar 的 zip——Fabric API 是 Apache-2.0，可以合法轉載。
+只有官方啟動器的玩家需要手動放 jar。如果那群人佔比高，可以在說明裡附一個打包好的 zip——
+Fabric API 是 Apache-2.0，可以合法轉載。
 
 ---
 
@@ -385,10 +407,18 @@ zip 是照打包當下的 `mods/` 內容做的。之後你增刪模組，要重�
 建置與架構說明見 [`.claude/README.md`](.claude/README.md)。
 
 ```bash
-./gradlew build        # 產出 build/libs/automodfetcher-x.y.z.jar
-./gradlew runServer    # 開發用伺服器 run/server/
-./gradlew runClient    # 開發用客戶端 run/client/
+./gradlew buildAll                    # 四個目標全建，jar 收進 build/libs/<版本>/
+./gradlew build                       # 只建目前啟用的那一個節點
+./gradlew :1.21.1-fabric:runServer    # 開發用伺服器 run/1.21.1-fabric/server/
+./gradlew :1.21.1-fabric:runClient    # 開發用客戶端 run/1.21.1-fabric/client/
 ```
+
+節點的名字是 `<Minecraft 版本>-<loader>`，四個分別是 `1.20.1-fabric`、`1.20.1-forge`、
+`1.21.1-fabric`、`1.21.1-neoforge`。Stonecutter 一次只會讓一個節點是「啟用」的，所以
+`build` 只建那一個——要四個都建就用 `buildAll`，那也是 CI 跑的指令。
+
+每個節點有自己的 `run/<節點>/` 目錄：不同 Minecraft 版本的存檔互不相容，NeoForge 的
+`mods/` 也不是 Fabric 的。
 
 ## 授權
 

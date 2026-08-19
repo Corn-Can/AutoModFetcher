@@ -48,10 +48,12 @@ Other people's mods are never rehosted — the manifest only sends secure platfo
 🗃️ **One-Command Modpacks:**
 Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and CurseForge zip formats.
 
-🔄 **Hot-Reload Manifest:**
-Use `/automodfetcher reload` to rebuild the manifest without restarting the server.
+🔄 **Rebuild the Manifest Without a Restart:**
+`/automodfetcher reload` rebuilds the list from the `mods` folder. It does not hot-reload mods — no loader can — so it also names any jar sitting in the folder without actually running, which is usually the boring answer to "why isn't this syncing".
 
 ## 🧩 Every Loader, One Behaviour
+
+**Minecraft 1.20.1** (Fabric, Forge) and **1.21.1** (Fabric, NeoForge) — one behaviour across all four.
 
 > Fabric, Forge and NeoForge each turn an incompatible client away at a different moment, and all three do it before a mod would normally get to speak. AutoModFetcher reaches the player during login, ahead of that check — so instead of a wall that says "Incompatible client", they get a list of what is missing and a button.
 
@@ -62,7 +64,9 @@ Use `/automodfetcher reload` to rebuild the manifest without restarting the serv
 
 ## 📋 Requirements & Important Notes
 
+*   **Versions:** Minecraft **1.20.1** (Fabric, Forge) and **1.21.1** (Fabric, NeoForge). The loader and game version are both in the filename — take the one matching the server you are joining.
 *   **Installation:** Must be installed on **both** the Server and the Client.
+*   **Dependencies:** The Fabric builds need **Fabric API**. The Forge and NeoForge builds need nothing beyond the loader itself.
 *   **Restart is Mandatory:** Due to how Java class loading works, every loader only scans the `mods` folder at launch. A quick restart is required after downloading to load the new code — **one** restart. Removals are finished off by a tiny helper once the game has closed, so the folder is already correct when you reopen it. Nothing relaunches the game for you: that is unreliable under launchers that supervise their own processes, and a new instance would only race the cleanup. Close, reopen, play. When files are removed or set aside, that takes effect one launch later still — AutoModFetcher notices and asks for the extra restart rather than letting you join into a failure.
 *   **Third-Party Restrictions:** If a mod author disables third-party downloads, AutoModFetcher respects that by default — such mods are excluded from bundles, and players receive a direct link to that exact file version instead. `/automodfetcher export curseforge` is the route that installs them the way their authors allow.
 *   **File Deletion:** Removed mods are deleted on the *next* launch, as Java locks running `.jar` files.
