@@ -45,4 +45,8 @@ deps.fabric_api = "0.116.15+1.21.1"
 # NeoForge spells compatibility as a Maven range.
 mod.mc_compat = "[1.21.1]"
 mod.java = ">=21"
+# Built against the version this is actually tested on. neoforge.mods.toml accepts
+# [21.1,), so the jar still runs on any 21.1.x — but the build should match what was put
+# in front of a real server. That file used to derive its range from this value, which
+# made every NeoForge older than this exact build refuse to load the mod.
 deps.neo_loader = "21.1.248"

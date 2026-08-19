@@ -20,7 +20,7 @@ config = "automodfetcher.mixins.json"
 [[dependencies.${id}]]
 modId = "neoforge"
 type = "required"
-versionRange = "[${neoforge},)"
+versionRange = "[21.1,)"
 ordering = "NONE"
 side = "BOTH"
 

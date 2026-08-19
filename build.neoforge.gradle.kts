@@ -80,7 +80,6 @@ tasks {
 			register("version", "mod.version")
 			register("minecraft", "mod.mc_compat")
 			register("pack_format", "mod.pack_format")
-			register("neoforge", "deps.neo_loader")
 		}
 
 		filesMatching("META-INF/neoforge.mods.toml") { expand(props) }
