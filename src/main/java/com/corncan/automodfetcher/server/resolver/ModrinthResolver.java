@@ -110,9 +110,19 @@ public final class ModrinthResolver {
 	 *
 	 * <p>When the project exists but carries no matching release, the lookup still yields its
 	 * page — a player who has to install the mod by hand can at least be sent somewhere.
+	 *
+	 * <p>The loader has to be named. A release is uploaded once per loader and those are
+	 * different files, so asking without saying which one wants the Fabric build of a mod a
+	 * Forge server is running. Modrinth answers a wrong loader with an empty list rather than
+	 * an error, which reads downstream as "this mod is not on Modrinth" — and every player is
+	 * then told to install it by hand, naming no cause.
+	 *
+	 * <p>It arrives as an argument rather than being read from {@code Loader.INSTANCE} so that
+	 * this class stays what it looks like: an HTTP client that knows nothing about the game
+	 * it is part of.
 	 */
 	public static Lookup resolveByModVersion(HttpClient http, String modId, String modVersion,
-			String gameVersion) {
+			String gameVersion, String loaderId) {
 		if (modId == null || modId.isBlank() || modVersion == null || modVersion.isBlank()) {
 			return Lookup.NOTHING;
 		}
@@ -120,7 +130,8 @@ public final class ModrinthResolver {
 		try {
 			String uri = "https://api.modrinth.com/v2/project/"
 					+ URLEncoder.encode(modId, StandardCharsets.UTF_8)
-					+ "/version?loaders=" + URLEncoder.encode("[\"fabric\"]", StandardCharsets.UTF_8)
+					+ "/version?loaders="
+				+ URLEncoder.encode("[\"" + loaderId + "\"]", StandardCharsets.UTF_8)
 					+ "&game_versions="
 					+ URLEncoder.encode("[\"" + gameVersion + "\"]", StandardCharsets.UTF_8);
 

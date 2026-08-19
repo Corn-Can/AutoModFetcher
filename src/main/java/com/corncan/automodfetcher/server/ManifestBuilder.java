@@ -256,6 +256,7 @@ public final class ManifestBuilder {
 		// Second pass: a jar Modrinth does not know by hash is usually the CurseForge
 		// packaging of a release Modrinth does have. Look it up by mod id and version.
 		String gameVersion = AutoModFetcher.minecraftVersion();
+		String loaderId = Loader.INSTANCE.packLoaderId();
 
 		for (ScannedMod mod : needLookup) {
 			if (resolved.containsKey(mod.sha1())) {
@@ -263,7 +264,7 @@ public final class ManifestBuilder {
 			}
 
 			ModrinthResolver.Lookup lookup = ModrinthResolver.resolveByModVersion(http, mod.modId(),
-					mod.modVersion(), gameVersion);
+					mod.modVersion(), gameVersion, loaderId);
 
 			if (lookup.resolution() != null) {
 				resolved.put(mod.sha1(), lookup.resolution());

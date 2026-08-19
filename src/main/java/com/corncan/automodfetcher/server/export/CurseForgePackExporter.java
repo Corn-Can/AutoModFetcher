@@ -91,7 +91,7 @@ public final class CurseForgePackExporter {
 
 				budget--;
 				identity = CurseForgeResolver.identifyBySlug(http, config.curseforgeApiKey, mod.modId(),
-						mod.modVersion(), gameVersion);
+						mod.modVersion(), gameVersion, Loader.INSTANCE.packLoaderId());
 			}
 
 			if (identity == null) {

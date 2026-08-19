@@ -37,8 +37,6 @@ public final class CurseForgeResolver {
 
 	private static final int MINECRAFT_GAME_ID = 432;
 	private static final int MOD_CLASS_ID = 6;
-	private static final int FABRIC_LOADER_TYPE = 4;
-
 	private CurseForgeResolver() {
 	}
 
@@ -138,7 +136,7 @@ public final class CurseForgeResolver {
 	 * @return the project and file ids, or null if the mod, the release or the loader is absent
 	 */
 	public static ProjectFile identifyBySlug(HttpClient http, String apiKey, String modId,
-			String modVersion, String gameVersion) {
+			String modVersion, String gameVersion, String loaderId) {
 		if (modId == null || modId.isBlank() || modVersion == null || modVersion.isBlank()) {
 			return null;
 		}
@@ -150,7 +148,7 @@ public final class CurseForgeResolver {
 				return null;
 			}
 
-			Integer fileId = findFileId(http, apiKey, projectId, modVersion, gameVersion);
+			Integer fileId = findFileId(http, apiKey, projectId, modVersion, gameVersion, loaderId);
 
 			if (fileId == null) {
 				return null;
@@ -164,7 +162,7 @@ public final class CurseForgeResolver {
 		}
 	}
 
-	/** Fabric mod ids and CurseForge slugs line up often enough to be worth trying first. */
+	/** Mod ids and CurseForge slugs line up often enough to be worth trying first. */
 	private static Integer findProjectId(HttpClient http, String apiKey, String slug) throws Exception {
 		URI uri = URI.create("https://api.curseforge.com/v1/mods/search?gameId=" + MINECRAFT_GAME_ID
 				+ "&classId=" + MOD_CLASS_ID
@@ -186,11 +184,41 @@ public final class CurseForgeResolver {
 		return mod.has("id") ? mod.get("id").getAsInt() : null;
 	}
 
+	/**
+	 * CurseForge names loaders by number: 1 Forge, 4 Fabric, 5 Quilt, 6 NeoForge.
+	 *
+	 * <p>Null for anything else, and the caller abandons the lookup rather than retrying it
+	 * unfiltered. An unfiltered query does answer, and the answer is a file built for some
+	 * other loader — worse than no answer at all, because everything downstream trusts this
+	 * file id and would hand that jar to players as the real thing.
+	 */
+	private static Integer loaderTypeOf(String loaderId) {
+		if (loaderId == null) {
+			return null;
+		}
+
+		return switch (loaderId) {
+			case "forge" -> 1;
+			case "fabric" -> 4;
+			case "quilt" -> 5;
+			case "neoforge" -> 6;
+			default -> null;
+		};
+	}
+
 	private static Integer findFileId(HttpClient http, String apiKey, int projectId, String modVersion,
-			String gameVersion) throws Exception {
+			String gameVersion, String loaderId) throws Exception {
+		Integer loaderType = loaderTypeOf(loaderId);
+
+		if (loaderType == null) {
+			AutoModFetcher.LOGGER.warn("No CurseForge loader number is known for {}, so the lookup "
+					+ "is abandoned; a file built for another loader would be worse than none", loaderId);
+			return null;
+		}
+
 		URI uri = URI.create("https://api.curseforge.com/v1/mods/" + projectId + "/files"
 				+ "?gameVersion=" + URLEncoder.encode(gameVersion, StandardCharsets.UTF_8)
-				+ "&modLoaderType=" + FABRIC_LOADER_TYPE + "&pageSize=50");
+				+ "&modLoaderType=" + loaderType + "&pageSize=50");
 
 		JsonObject json = getJson(http, apiKey, uri);
 
