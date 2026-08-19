@@ -82,38 +82,49 @@ public final class AutoModFetcherCommand {
 
 			server.execute(() -> reportBundle(source, result, config));
 
-			if (result.contents().isEmpty() || config.githubToken.isBlank()) {
+			if (result.contents().isEmpty()) {
 				return;
 			}
 
-			// Uploading is the step people stop before, and a bundle nobody published is
-			// invisible: the server carries on telling players to install by hand.
-			server.execute(() -> source.sendSuccess(
-					() -> Component.translatable("automodfetcher.command.bundle_uploading",
-							config.githubRepo.isBlank() ? "GitHub" : config.githubRepo), false));
+			GitHubRelease.Result upload = null;
 
-			GitHubRelease.Result upload = GitHubRelease.upload(config.githubRepo, config.githubToken,
-					config.githubReleaseTag, result.file());
+			if (!config.githubToken.isBlank()) {
+				// Uploading is the step people stop before, and a bundle nobody published is
+				// invisible: the server carries on telling players to install by hand.
+				server.execute(() -> source.sendSuccess(
+						() -> Component.translatable("automodfetcher.command.bundle_uploading",
+								config.githubRepo.isBlank() ? "GitHub" : config.githubRepo), false));
 
-			config.bundleUrl = upload.downloadUrl();
-			// Written back so the repository that was made for them is theirs to see and keep.
-			config.githubRepo = upload.repo();
-			config.save();
+				upload = GitHubRelease.upload(config.githubRepo, config.githubToken,
+						config.githubReleaseTag, result.file());
 
+				config.bundleUrl = upload.downloadUrl();
+				// Written back so the repository that was made for them is theirs to see and keep.
+				config.githubRepo = upload.repo();
+				config.save();
+			}
+
+			// Always, and this is the whole point of the command: the zip on disk changes
+			// nothing until the list players are sent is built again from it. Leaving this to
+			// the upload branch meant a bundle needing no upload at all — the common case now —
+			// was packed perfectly and never offered to anyone.
 			ServerNetworking.rebuild();
 
-			ModBundle published = BundleBuilder.describe(upload.downloadUrl(), 0);
-			BundleVerifier.Result verdict = published == null
-					? null
-					: BundleVerifier.verify(published);
+			if (upload == null) {
+				return;
+			}
+
+			GitHubRelease.Result published = upload;
+			ModBundle bundle = BundleBuilder.describe(published.downloadUrl(), 0);
+			BundleVerifier.Result verdict = bundle == null ? null : BundleVerifier.verify(bundle);
 
 			server.execute(() -> {
 				source.sendSuccess(() -> Component.literal(
-						(upload.replacedExisting() ? "Replaced the bundle at " : "Uploaded to ")
-								+ upload.downloadUrl()).withStyle(ChatFormatting.AQUA), true);
+						(published.replacedExisting() ? "Replaced the bundle at " : "Uploaded to ")
+								+ published.downloadUrl()).withStyle(ChatFormatting.AQUA), true);
 
-				if (published != null && verdict != null) {
-					reportVerdict(source, published, verdict);
+				if (bundle != null && verdict != null) {
+					reportVerdict(source, bundle, verdict);
 				}
 			});
 		});
