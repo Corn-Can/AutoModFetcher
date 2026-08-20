@@ -30,6 +30,44 @@ Check the "Trust this server" box, and it will handle future updates quietly. Th
 If a mod cannot be downloaded automatically, you get a clickable link to its official page.
 
 ---
+
+## 🖥️ What You Actually See
+
+> Five screens, and you only ever get the ones that apply to you. If your mods already match the server, not one of them appears — you join straight into the game.
+
+### 1. "This server needs different mods"
+
+The screen that matters. It comes up **before a single byte is written to disk**, and it is a full account of what is about to happen rather than a yes/no box. Only the sections that apply are drawn:
+
+*   **`Will be downloaded (12):`** — every file by name, size, and the domain serving it. You can read where each one comes from before agreeing to any of it.
+*   **`3 file(s) came with the server's reply:`** — small mods the server sent inline. Already received, nothing to fetch, no third-party site in the picture at all.
+*   **`This server uses a source outside Modrinth and CurseForge:`** — the site named outright, behind its own separate button (`I understand — install`) so it cannot be agreed to by reflex. Saying yes covers **that one server** and nothing else.
+*   **`Refused (2):`** — what was rejected and why, in plain words: *"The server sent an unsafe file name"*, *"Sent over plain http, which cannot be trusted"*. Refusals are always shown, never quietly skipped.
+*   **`Install these yourself (1):`** — the ones no one is allowed to distribute, each with an `Open …` link to that exact version's page rather than a project front page.
+*   **`This server does not run these (17):`** — leftovers from an old pack, the usual reason a join fails one second in. *"They will be moved to `mods-disabled-by-automodfetcher`, next to your mods folder. Nothing is deleted."*
+*   **`Will be removed on the next launch (3):`** — files this mod installed earlier and the server no longer wants.
+
+Alongside them: a **`Don't ask again for this server`** checkbox you have to tick yourself, an **`Open mods folder`** button for when you would rather do it by hand, and — if you are running out of a shared `.minecraft` — a warning that *"These will load in all your other worlds too."*
+
+Not in the mood? **`Connect anyway`** is right there, and it tells you the price: *"If the server needs these, you may be disconnected right after joining."*
+
+### 2. "Downloading mods"
+
+One line per file, marked `...` while it runs and `done`, `unpacking` or `failed` once it settles — over a running byte total and a live rate that reads like `4.2 MB/s — about 6s left`. `Cancel` works at any point, and a cancelled download leaves nothing half-installed.
+
+### 3. "Mods updated"
+
+The tally: how many installed, how many are queued for removal or for moving aside, how many failed. Then the one instruction that matters — *"Restart the game, then join the server again."* If something is still missing, `Try again` is on the same screen.
+
+### 4. "One more restart"
+
+The screen nobody else bothers to write. Your mods folder is already correct, but this session is still running what was loaded at launch, so joining now would fail **for a reason you just fixed**. It stops you and explains that, instead of letting you walk into a disconnect you would have no way to read.
+
+### 5. When a server drops you anyway
+
+Join without everything and get kicked a second later, and vanilla gives you "Disconnected" and nothing else — the real cause is an exception in some other mod's packet handler, in a log file. This screen quotes whatever the server said, then adds **`This may be why:`** and lists the mods you were missing. It knew before you ever connected.
+
+---
 ## 🛠️ Server Side: True Plug-and-Play
 
 
@@ -44,6 +82,9 @@ Other people's mods are never rehosted — the manifest only sends secure platfo
 
 📦 **Ship Your Own Mods:**
 `/automodfetcher bundle` packs the mods *no platform carries* — the ones you wrote, built privately, or run a since-removed version of. **For a small one that is the entire setup:** it travels with the server's reply, so there is no account, no upload and no link to find. Larger packs need somewhere to live — paste a GitHub token and the same command uploads it for you, or host it anywhere and paste the address straight from your browser, share pages and all.
+
+🌍 **Your Own World, Opened to LAN:**
+Not just dedicated servers. Put the mod in your own `mods` folder, open a world, and everyone who joins gets synced. Your personal folder holds shaders and minimaps a server's would not, so the chat tells you how many mods are about to be offered and where to list the ones you would rather keep to yourself. The list is only built once you actually open the world — single-player never pays for it.
 
 🗃️ **One-Command Modpacks:**
 Type `/automodfetcher export` to instantly generate `.mrpack` (Modrinth) and CurseForge zip formats.
