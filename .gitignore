@@ -47,3 +47,7 @@ replay_*.log
 
 .claude/*.png
 .claude/*.jpg
+
+# scratch worktrees for parallel work — same repository, separate checkout
+
+.claude/worktrees/
