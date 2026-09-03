@@ -42,6 +42,8 @@ public final class AutoModFetcherCommand {
 				.requires(source -> source.hasPermission(2))
 				.then(Commands.literal("reload")
 						.executes(context -> reload(context.getSource())))
+				.then(Commands.literal("doctor")
+						.executes(context -> doctor(context.getSource())))
 				.then(Commands.literal("export")
 						.executes(context -> exportAll(context.getSource()))
 						.then(Commands.literal("modrinth")
@@ -56,6 +58,169 @@ public final class AutoModFetcherCommand {
 								.then(Commands.argument("address", StringArgumentType.greedyString())
 										.executes(context -> setBundleUrl(context.getSource(),
 												StringArgumentType.getString(context, "address"))))));
+	}
+
+	/**
+	 * Answers "what is the state of this server, and what do I do next" in one place.
+	 *
+	 * <p>The information already existed; on a modpack it was unusable. Three hundred mods
+	 * produce hundreds of startup log lines, the totals that matter are never stated as
+	 * totals, and the single fact that decides the next action — no CurseForge key, or
+	 * fourteen mods that can never be distributed at all — is buried among them. An operator
+	 * who has to reconstruct that is doing exactly the research this mod exists to remove.
+	 *
+	 * <p>Every line ends in something to do, or says plainly that nothing can be done and why.
+	 */
+	private static int doctor(CommandSourceStack source) {
+		ModManifest manifest = ServerNetworking.currentManifest();
+
+		if (manifest == null) {
+			source.sendFailure(Component.literal("The mod list is still being built, or syncing is "
+					+ "off in server.json. Try again in a moment."));
+			return 0;
+		}
+
+		BuildReport report = ManifestBuilder.lastReport();
+
+		source.sendSuccess(() -> Component.literal(report.total() + " mod file(s) on this server")
+				.withStyle(ChatFormatting.WHITE), false);
+
+		if (report.resolved() > 0) {
+			String sources = report.bySource().entrySet().stream()
+					.map(entry -> entry.getValue() + " " + entry.getKey())
+					.collect(java.util.stream.Collectors.joining(", "));
+			source.sendSuccess(() -> Component.literal("  " + report.resolved()
+					+ " install automatically (" + sources + ")").withStyle(ChatFormatting.GREEN), false);
+		}
+
+		if (!report.bundled().isEmpty()) {
+			source.sendSuccess(() -> Component.literal("  " + report.bundled().size()
+					+ (report.bundleEmbedded()
+							? " travel in your own bundle, sent over the connection"
+							: " travel in your own bundle, which you host"))
+					.withStyle(ChatFormatting.GREEN), false);
+		}
+
+		// A hosted bundle is the one entry above that can stop working with nothing here
+		// changing: the zip describes the mods folder as it was when it was packed, so an
+		// edit without a re-upload leaves every client failing a hash check it cannot explain.
+		if (report.bundleNeedsHosting()) {
+			source.sendSuccess(() -> Component.literal("  Those " + report.bundled().size()
+					+ " only reach players while the uploaded zip still matches this folder. "
+					+ "Nothing here can check that — run /automodfetcher bundle verify, and run "
+					+ "it again every time you change mods.").withStyle(ChatFormatting.YELLOW), false);
+		}
+
+		// The one cost of a missing key that survives complete coverage.
+		if (report.bundleAuthorCheckSkipped()) {
+			source.sendSuccess(() -> Component.literal("  Those " + report.bundled().size()
+					+ " were bundled without checking whether their authors allow it. That check is "
+					+ "CurseForge saying no, and with no curseforgeApiKey set CurseForge was never "
+					+ "asked, so nothing was excluded. A key is free "
+					+ "(https://console.curseforge.com/); set it and run /automodfetcher bundle "
+					+ "again to find out what should not be in there.")
+					.withStyle(ChatFormatting.RED), false);
+		}
+
+		// Said before the other gaps because it is the only one with a real fix attached.
+		if (report.curseForgeMightHelp()) {
+			source.sendSuccess(() -> Component.literal("  curseforgeApiKey is not set, so CurseForge "
+					+ "was never asked about the " + (report.withPage().size() + report.unknown().size())
+					+ " file(s) below. A key is free: https://console.curseforge.com/ — put it in "
+					+ "config/" + AutoModFetcher.MOD_ID + "/" + ServerSyncConfig.FILE_NAME
+					+ " and run /automodfetcher reload.").withStyle(ChatFormatting.YELLOW), false);
+		}
+
+		if (!report.authorRestricted().isEmpty()) {
+			source.sendSuccess(() -> Component.literal("  " + report.authorRestricted().size()
+					+ " cannot ever be installed automatically — their authors disabled third-party "
+					+ "downloads. Run /automodfetcher export curseforge: the CurseForge app is "
+					+ "allowed to fetch these and we are not. " + names(report.authorRestricted()))
+					.withStyle(ChatFormatting.RED), false);
+		}
+
+		if (!report.withPage().isEmpty()) {
+			source.sendSuccess(() -> Component.literal("  " + report.withPage().size()
+					+ " have no download we can use; players get a link instead. "
+					+ names(report.withPage())).withStyle(ChatFormatting.YELLOW), false);
+		}
+
+		if (!report.unknown().isEmpty()) {
+			source.sendSuccess(() -> Component.literal("  " + report.unknown().size()
+					+ " are on no platform at all. Run /automodfetcher bundle to ship them yourself. "
+					+ names(report.unknown())).withStyle(ChatFormatting.YELLOW), false);
+		}
+
+		// Loudest, and last, because it is the only entry here where something was taken off
+		// the list rather than merely reported on.
+		if (!report.unmetDependencies().isEmpty()) {
+			source.sendSuccess(() -> Component.literal("  " + report.withheld().size()
+					+ " mod(s) held back: they cannot start without a dependency nobody can "
+					+ "obtain, so installing them would break a player's game rather than "
+					+ "complete it. "
+					+ report.unmetDependencies().entrySet().stream()
+							.map(entry -> entry.getKey() + " (needed by " + String.join(", ", entry.getValue()) + ")")
+							.collect(java.util.stream.Collectors.joining("; ")))
+					.withStyle(ChatFormatting.RED), false);
+
+			// A dependency still missing on a server that started is a client-side one, so the
+			// mod that supplies it is a client mod and does not belong in this mods folder.
+			source.sendSuccess(() -> Component.literal("    Players are unaffected and can still "
+					+ "join. To stop this being reported, add the held-back file(s) to "
+					+ "excludeFileNames — do not install the missing client mod on this server.")
+					.withStyle(ChatFormatting.GRAY), false);
+		}
+
+		source.sendSuccess(() -> Component.literal(advice(report)).withStyle(ChatFormatting.AQUA), false);
+
+		return 1;
+	}
+
+	/** The single next action, chosen by whichever gap costs a player the most. */
+	private static String advice(BuildReport report) {
+		if (!report.authorRestricted().isEmpty()) {
+			return "Next: /automodfetcher export — hand players both files. The CurseForge pack is "
+					+ "the only route that installs the author-restricted mods.";
+		}
+
+		if (report.curseForgeMightHelp()) {
+			return "Next: set curseforgeApiKey, then /automodfetcher reload, then run this again.";
+		}
+
+		if (!report.unknown().isEmpty()) {
+			return "Next: /automodfetcher bundle.";
+		}
+
+		if (!report.withheld().isEmpty()) {
+			return "Everything else reaches players automatically. The held-back mod(s) above are "
+					+ "the only gap, and nothing on this server can close it.";
+		}
+
+		// Said before the all-clear, because an unverified upload is exactly the case where
+		// every file looks accounted for and players still get nothing.
+		if (report.bundleAuthorCheckSkipped()) {
+			return "Next: set curseforgeApiKey and re-run /automodfetcher bundle, so mods whose "
+					+ "authors disabled third-party downloads are kept out of your zip.";
+		}
+
+		if (report.bundleNeedsHosting()) {
+			return "Next: /automodfetcher bundle verify — every file is accounted for, but "
+					+ report.bundled().size() + " of them depend on your upload still matching.";
+		}
+
+		if (report.unavailable() == 0) {
+			return "Everything on this server can reach a player automatically. Nothing to do.";
+		}
+
+		return "Next: /automodfetcher export, so new players start from a working install.";
+	}
+
+	/** Names are the point of this command, but a 300-mod list is not, so it is capped. */
+	private static String names(List<String> files) {
+		int shown = Math.min(files.size(), 8);
+		String joined = String.join(", ", files.subList(0, shown));
+
+		return shown == files.size() ? joined : joined + ", and " + (files.size() - shown) + " more";
 	}
 
 	/**

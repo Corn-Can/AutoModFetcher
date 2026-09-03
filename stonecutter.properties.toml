@@ -4,7 +4,7 @@
 mod.id = "automodfetcher"
 mod.name = "AutoModFetcher"
 mod.group = "com.corncan.automodfetcher"
-mod.version = "0.1.0"
+mod.version = "0.2.0"
 
 deps.fabric_loader = "0.17.3"
 loomx.loom_version = "1.14-SNAPSHOT"
@@ -28,7 +28,7 @@ mod.mc_compat = "[1.20.1]"
 mod.java = ">=17"
 # Built against the version this is actually tested on. mods.toml accepts [47,), so the jar
 # still runs on any 47.x — but the build should match what was put in front of a real server.
-deps.forge_loader = "1.20.1-47.4.0"
+deps.forge_loader = "1.20.1-47.4.23"
 
 ["1.21.1"]
 mod.mc_releases = ["1.21.1"]

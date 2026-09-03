@@ -68,6 +68,15 @@ public final class ServerNetworking {
 				if (built != null && !server.isDedicatedServer()) {
 					server.execute(() -> announceToHost(server, built));
 				}
+			} catch (Throwable e) {
+				// Without this the thread died quietly and the manifest stayed null forever,
+				// which every other part of this mod reads as "nothing to sync": the login
+				// query is never sent, players join as though the server had no mod list at
+				// all, and the operator is told nothing. A build that failed has to say so —
+				// it is the difference between a bug and a mod that appears not to be
+				// installed.
+				AutoModFetcher.LOGGER.error("Could not build the mod list. No player will be "
+						+ "offered anything until this is fixed and the server restarts.", e);
 			} finally {
 				building.set(false);
 			}

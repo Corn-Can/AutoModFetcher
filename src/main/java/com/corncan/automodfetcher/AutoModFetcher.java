@@ -1,5 +1,6 @@
 package com.corncan.automodfetcher;
 
+import com.corncan.automodfetcher.platform.Loader;
 import com.corncan.automodfetcher.server.AutoModFetcherCommand;
 //? if fabric {
 import com.corncan.automodfetcher.server.ServerNetworkingFabric;
@@ -32,6 +33,14 @@ public final class AutoModFetcher {
 	}
 
 	public static void init() {
+		// Says which build is actually loaded. Two jars for the same mod version are
+		// indistinguishable by file name, so without this the only way to tell whether a
+		// replacement took is to look for a feature and guess at its absence — and a command
+		// that is missing because the old jar is still there reports itself exactly the same
+		// way as one that is missing because the player lacks permission for it.
+		LOGGER.info("AutoModFetcher {} for Minecraft {} on {} {}", VERSION, MINECRAFT_VERSION,
+				Loader.INSTANCE.packLoaderId(), Loader.INSTANCE.loaderVersion());
+
 		//? if fabric {
 		ServerNetworkingFabric.register();
 		//?}
