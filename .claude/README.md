@@ -56,6 +56,51 @@ AutoModFetcher 是一個基於 Fabric (Mojang official mappings) 的「引導型
     若回傳 `downloadUrl` 為 `null`（作者關閉第三方下載），一律視為「無法解析」，**不會**自行拼 CDN 網址繞過。
 *   **快取:** `resolve-cache.json` 以 SHA-1 為 key；未命中也會快取 24 小時，避免每次開服重打 API。
 *   清單只在**伺服器啟動時於背景執行緒建構一次**，之後每位玩家連線直接送快取結果。
+*   **平台查詢用「這個 jar 是給哪個 loader 的」，不是「這台伺服器是什麼 loader」**
+    （`ManifestBuilder.loadersToTry`）。`JarMetadata.loaders()` 由讀到哪個 metadata 檔決定：
+    `fabric.mod.json` → fabric；`neoforge.mods.toml` → neoforge；
+    `mods.toml` → forge ＋ neoforge（1.20.1 的 NeoForge 也讀這個檔名）。
+    跑 Sinytra Connector 的 Forge / NeoForge 伺服器，`mods/` 裡有 Fabric jar 是合法狀態，
+    拿 `loaders=["forge"]` 去問 Modrinth 要一個不存在的建置，答案永遠是沒有。
+    讀不到就退回本次建置的 loader（舊行為），順序把自己的 loader 排前面。
+    **注意實測結果**：許多看起來像 Fabric 的模組（kambrik、clientsort）在 1.20.1 其實有
+    官方 Forge 建置，Modrinth 上就標 `loaders=['forge']`——所以這個修正的實際影響
+    要靠 `/automodfetcher doctor` 量，不能從 mod id 的長相推斷。
+
+*   **`/automodfetcher doctor`** 把一次建置的結果彙整成 `BuildReport`
+    （`ManifestBuilder.lastReport()`）。資訊本來就有，但三百個模組時等於沒有：
+    log 幾百行、關鍵總數從來沒被當成總數講過、而決定下一步的那個事實
+    （沒有 CF key／有幾個永遠發不出去）埋在裡面。
+    措辭上刻意分開「沒問過 CurseForge」與「CurseForge 沒有」——`curseForgeMightHelp()`
+    的 javadoc 寫明理由：沒 key 就沒問過，斷言它有會害人去申請一把沒用的 key。
+
+*   **相依缺口在安裝前就算出來，不是等崩潰**（`ManifestBuilder.withUnmetDependencies`）。
+    缺一般模組的玩家會被告知然後照樣進得去，這是刻意的；但缺的是**相依**時性質完全不同——
+    玩家拿到一個啟動不了的模組，下次開遊戲在任何畫面出現之前就掛掉，而崩潰訊息只指名那個函式庫，
+    沒有任何線索指向伺服器。
+    -   **判斷必須在伺服器做，因為只有伺服器做得到。** 客戶端看不進它即將下載的 jar 內部，
+        JiJ 的內嵌函式庫對它完全隱形——叫它自己檢查，它會把伺服器上每一個 JiJ 函式庫
+        都報成「缺少相依」。所以 wire 上送的是**結論**（`unmetDependencies`：拿不到的 mod id →
+        會因此啟動不了的檔名），不是原始相依表。
+    -   只點名**在 `mods/` 裡真的有這個檔案**的情況；其餘要嘛是 JiJ、要嘛由 loader 提供，
+        硬猜只會用一堆假警報埋掉真的那一個。
+    -   **必須排在 `attachBundle` 之後**：打包正好就是把「拿不到」變成「拿得到」的動作，
+        算在前面會去警告管理員一個他已經解決掉的問題。
+    -   客戶端唯一補上的是伺服器不可能知道的事：**這個玩家是不是本來就有那個函式庫**
+        （`SyncPlanner.findMissingDependencies`）。幾個月前自己手動裝好的人不會崩潰，
+        叫他去補裝是錯的。
+    -   結果進 `SyncPlan.missingDependencies`，在確認畫面**紅字排在最前面**——
+        這是整張清單上唯一一個預告「遊戲開不起來」而非「東西不齊」的項目。
+        它是報告不是工作（不進 `hasActionableWork`），所以「仍要連線」的決定照樣記得住。
+
+*   **被 `excludeFileNames` 濾掉、卻被別人需要的檔案會自動放回去**（`ServerModScanner.keep`）。
+    被排除的檔案本來不干客戶端的事；但被排除的檔案**正好是清單上另一個模組的相依**時完全是另一回事：
+    玩家下載了那個模組、相依永遠不會到，下次啟動就掛。所以先讀完**每一個** jar 的 metadata
+    （讀 metadata 只是幾個 zip entry，貴的 hash 只算存活下來的），再決定誰留下——
+    **先決定後讀取正是讓「被排除的相依」完全隱形的原因：沒有東西能注意到它。**
+    放回去會逐檔 WARN 並寫明逃生門（把需要它的那個模組也一起排除）。
+    只覆蓋 `excludeFileNames`：`includeServerOnlyMods` 不覆蓋（宣告自己是 server-only 又被客戶端
+    模組需要，是它自己矛盾），`includeSelf` 也不覆蓋（那個設定的存在就是為了不要換掉執行中的自己）。
 *   **兩個平台都查不到的檔案**（`unresolved` 且無 `pageUrl`）可由 `/automodfetcher bundle` 打包成
     一個 zip。`ManifestBuilder.attachBundle()` 會把這些檔案從 `unresolved` 移出、改掛在
     `ModBundle` 上。作者關閉第三方下載的預設不入包，見 `includeAuthorRestrictedMods`。
@@ -134,11 +179,38 @@ manifest 除了檔案清單，還帶一份 `serverModIds`——伺服器實際�
 這是唯一能偵測到「拿舊整合包連新伺服器」的機制：那些殘留模組不在 manifest 裡，
 所以整個下載流程對它們是完全瞎的，而它們正是 registry 對不上、加入一秒後被踢的原因。
 
-三個護欄：
+五個護欄，每一個都是因為少了它就會冤枉到某個無辜的檔案：
 
 1. `serverModIds` 為空（舊版伺服器）就完全不表示意見。
 2. `environment` 為 `client` 的一律不點名——Sodium、Iris、小地圖本來就不該出現在伺服器上。
 3. 讀不到 mod id 的 jar 跳過，用檔名猜會冤枉別人的模組。
+4. **`JarMetadata.sideKnown()` 為 false 的一律不點名。** Forge 與 NeoForge 的 `mods.toml`
+   **沒有** mod 層級的 side 欄位，所以在那兩個 loader 上，玩家每一個純客戶端模組都讀成
+   universal。實測後果是 Embeddium、Oculus、每一個小地圖全部被搬進 disabled 資料夾，
+   玩家直接進不去。格式答不出來的問題，我們也不要替它回答。
+   **這與「Fabric 模組沒寫 `environment`」是兩回事**——那邊欄位存在、預設就是 `"*"`，
+   那是一個答案。把兩者混為一談會讓這個功能在 Fabric 上也一起消失，
+   因為多數函式庫本來就不寫這個欄位。
+5. **別的模組需要的東西不算多餘**（`SyncPlanner.keepWhatIsStillNeeded`）。
+   cloth-config、architectury、owo-lib 這類函式庫宣告是 universal，而且不在任何沒用到它們的
+   伺服器上。搬走一個，下次啟動時需要它的那個模組就開不起來，而**崩潰訊息只會指名那個函式庫，
+   永遠不會提到我們**。判斷用 `JarMetadata.requires()`（Fabric 的 `depends`、Forge/NeoForge
+   的 `[[dependencies.x]]` 且 `mandatory=true` / `type="required"`），
+   而且是**不動點迭代而非單趟**——救回一個函式庫可能連帶救回它自己的相依，
+   那條鏈要一路追到底，否則崩潰只是往下移一格。
+
+### 「多餘模組」不能變成一道牆
+
+`connectAnyway()` 會把決定寫進 `skipped-servers.json`，但 `ClientSync.decide()` 原本只在
+`!plan.hasActionableWork()` 時才去讀它——而 `hasActionableWork()` 把 foreign 算成工作
+（搬檔案確實是工作）。結果是：只有多餘模組的 plan 永遠讀不回那個決定，玩家按了「仍要連線」、
+決定確實寫進磁碟了，下一次連線同一個畫面照樣跳出來。**想留著自己模組的人被永久擋在伺服器外面。**
+
+改成用 `SyncPlan.isOnlyReportable()`（downloads / bundles / deletions 皆空）當判準——
+那正好是 `unavailableSignature()` 涵蓋的範圍。下載與刪除**刻意不算在內**：簽章沒有描述它們，
+拿舊答案去跳過玩家從未拒絕過的工作是另一種錯。
+
+同時確認畫面在這種情況下把「取消」換成「仍要連線」：只有多餘模組時，取消等於回到同一道牆。
 
 處置寫進 `PendingOps.disable`，由 `PendingOpsApplier` 搬到 `mods-disabled-by-automodfetcher/`。
 **搬而不刪**，這是「動玩家自己的模組」唯一能被接受的形式。
@@ -209,8 +281,10 @@ src/main/
     PendingOpsHandoff.java          關閉時把待處理操作交給獨立程序
     PendingOpsHelper.java           那個獨立程序；只用 java.base，等 PID 結束後動檔案
     network/                        Channels / ModEntry / ModSide / ModManifest / ModBundle / BundledMod
-                                    （手寫 FriendlyByteBuf 序列化；bundles 寫在最後並以 readableBytes 守衛，
-                                     這是兩端唯一能各自升級的地方）
+                                    （手寫 FriendlyByteBuf 序列化；bundles、serverModIds、
+                                     unmetDependencies 依序寫在最後，**各自**以 readableBytes 守衛，
+                                     這是兩端唯一能各自升級的地方。往 ModEntry / ManualEntry 加欄位
+                                     不行——它們包在長度前綴的 list 裡，舊客戶端會讀到錯位）
     util/                           Hashing(SHA-1,SHA-512,Murmur2) / JarMetadata / Json / ModPaths
     server/
       ServerSyncConfig.java         server.json

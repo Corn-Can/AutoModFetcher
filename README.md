@@ -1,5 +1,7 @@
 # AutoModFetcher
 
+[Modrinth](https://modrinth.com/project/HmRciaCA) · [Discord](https://discord.gg/BRWWhVUg3w)
+
 **Minecraft 1.20.1**（Fabric、Forge）與 **1.21.1**（Fabric、NeoForge）
 
 連上伺服器時自動補齊你缺少的模組，不必再一個一個手動找、下載、安裝。
@@ -35,7 +37,7 @@
 下載對應你 Minecraft 版本的那一版，放進 `mods/`。Forge 與 NeoForge 不必，這個模組在那兩邊
 沒有額外相依。
 
-**3. AutoModFetcher** — 放進 `mods/`。檔名的形狀是
+**3. AutoModFetcher** — 從 [Modrinth](https://modrinth.com/project/HmRciaCA) 下載，放進 `mods/`。檔名的形狀是
 `automodfetcher-<loader>-<版本>+<Minecraft 版本>.jar`，四個目標各一個，拿對應你伺服器的
 那一份就好——例如 NeoForge 1.21.1 的伺服器要的是 `automodfetcher-neoforge-0.1.0+1.21.1.jar`。
 
@@ -87,6 +89,16 @@
 
 被白名單擋下的檔案會在確認畫面上單獨列出並說明原因，不會默默跳過。
 
+### 缺少的相依會在安裝前就被指出來
+
+模組缺一個**相依函式庫**跟缺一個普通模組是兩回事：後者只是少了點東西，前者會讓遊戲**根本開不起來**，
+而且崩潰訊息只會指名那個函式庫，完全不會提到伺服器或這個模組——最難查的那種。
+
+所以伺服器在建立清單時就會把這件事算完：哪些檔案沒有人下載得到、哪些模組會因此啟動不了。
+確認畫面上那一段是**紅字、排在最前面**，並寫明是哪個模組需要它。
+
+如果你其實早就自己裝過那個函式庫，就不會看到這一段——伺服器不知道你手上有什麼，客戶端知道。
+
 ### 伺服器沒有的模組會被指出來
 
 拿舊整合包的實例去連新伺服器，最容易踩的坑不是「少了什麼」，而是**多了什麼**。舊包留下的
@@ -97,9 +109,14 @@
 `mods-disabled-by-automodfetcher/` 資料夾。
 
 - **不會刪除任何東西。** 只是搬走，想要的話拖回去就好。
-- **要你按下同意才會動。** 沒同意就只是一份清單。
-- **不會點名純客戶端模組。** Sodium、Iris、小地圖這類 `environment` 標為 client 的一律不碰，
-  伺服器本來就不會有它們。
+- **要你按下同意才會動。** 沒同意就只是一份清單，而且畫面上一定有「仍要連線」——
+  你可以選擇留著自己的模組進伺服器，這個決定會被記住，不會每次連線再問一次。
+- **不會點名純客戶端模組。** Sodium、Iris、小地圖這類 `environment` 標為 client 的一律不碰。
+- **不會點名別的模組需要的函式庫。** cloth-config、architectury 這類東西伺服器上通常沒有，
+  但你的客戶端模組少了它就開不起來。只要還有留下來的模組需要它，它就會被留下（往下追整條相依鏈）。
+- **Forge 與 NeoForge 上完全不點名。** 那兩個格式沒有地方讓模組宣告自己是純客戶端用的，
+  所以在那邊「伺服器沒有」不構成任何證據。與其冤枉你整櫃的 Embeddium、Oculus、小地圖，
+  不如什麼都不說。這一項只在 Fabric 上運作。
 
 ### 移除模組只需要重開一次
 
@@ -362,6 +379,51 @@ zip 整包先驗 SHA-512，解壓後每個 jar 再驗一次。
 zip 是照打包當下的 `mods/` 內容做的。之後你增刪模組，要重新 `bundle`、重新上傳。
 沒重新上傳的話，客戶端的雜湊比對會失敗（這是對的，它不會裝來路不明的位元組），
 但玩家看到的只是一個看不懂的錯誤——所以請養成 `bundle verify` 的習慣。
+
+### 被排除但被需要的檔案會自動送出去
+
+`excludeFileNames` 擋掉的檔案本來不會出現在玩家的清單上。但如果那個檔案**正好是另一個模組的相依**，
+擋掉它等於送給玩家一個開不起來的模組。所以這種情況下它會被自動放回清單，並在 log 逐檔寫明：
+
+```
+cloth-config-15.0.140.jar is excluded by excludeFileNames, but tacz-1.1.4.jar needs it
+and would not start without it. Sending it anyway.
+```
+
+真的不想送，就把需要它的那個模組（上例是 `tacz-1.1.4.jar`）也一起排除。
+
+只有 `excludeFileNames` 會被這樣覆蓋。`includeServerOnlyMods` 不會——一個宣告自己是純伺服器端、
+又被客戶端模組需要的模組是它自己在矛盾。
+
+### 先看一眼全貌：`/automodfetcher doctor`
+
+模組一多，開服 log 就變成一片海。這個指令把該知道的事一次講完，**每一行都帶著下一步**：
+
+```
+323 mod file(s) on this server
+  281 install automatically (Modrinth 214, Modrinth (matching version) 41, CurseForge 26)
+  curseforgeApiKey is not set, so CurseForge was never asked about the 28 file(s) below.
+    A key is free: https://console.curseforge.com/
+  14 cannot ever be installed automatically — their authors disabled third-party downloads.
+    Run /automodfetcher export curseforge: the CurseForge app is allowed to fetch these and we are not.
+  Next: /automodfetcher export — hand players both files.
+```
+
+沒設 CurseForge key 時它會**明講**這件事，而不是讓那些模組安靜地變成「請自行安裝」。
+但它的措辭是「CurseForge 沒被問過」而不是「CurseForge 有這些檔案」——沒問過就是不知道，
+說死了只會讓你去申請一把其實沒用的 key。
+
+### 拿不到的相依會被點名
+
+如果某個模組相依於一個**兩個平台都查不到、也沒被打包**的檔案，開服時 log 會直接說：
+
+```
+tacz-1.1.4.jar needs cloth_config (cloth-config-15.0.140.jar), which no player can obtain.
+They will download tacz-1.1.4.jar and their game will fail to start.
+```
+
+處理方式就是 `/automodfetcher bundle`、填 `manualUrls`、或兩個模組都拿掉。
+這個判斷排在打包之後，所以你已經打包解決的東西不會再被念一次。
 
 ### 換模組之後要重啟伺服器
 
