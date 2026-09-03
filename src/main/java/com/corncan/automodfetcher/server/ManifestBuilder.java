@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,6 +28,7 @@ import com.corncan.automodfetcher.server.resolver.ModrinthResolver;
 import com.corncan.automodfetcher.server.resolver.ResolveCache;
 import com.corncan.automodfetcher.server.resolver.Resolution;
 import com.corncan.automodfetcher.util.Hashing;
+import com.corncan.automodfetcher.util.ModIds;
 import com.corncan.automodfetcher.util.ModPaths;
 
 /**
@@ -34,7 +36,17 @@ import com.corncan.automodfetcher.util.ModPaths;
  * download URL for every file via the cache, Modrinth, CurseForge and manual overrides.
  */
 public final class ManifestBuilder {
+	private static volatile BuildReport lastReport = BuildReport.NONE;
+
+	/** Files the last build kept back because installing them would break a client. */
+	private static volatile List<String> lastWithheld = List.of();
+
 	private ManifestBuilder() {
+	}
+
+	/** What the most recent build found, for {@code /automodfetcher doctor}. */
+	public static BuildReport lastReport() {
+		return lastReport;
 	}
 
 	public static ModManifest build(ServerSyncConfig config) {
@@ -87,7 +99,213 @@ public final class ManifestBuilder {
 		cache.retainOnly(knownSha1);
 		cache.save();
 
-		return attachBundle(assemble(mods, resolved, pages, restricted), config);
+		ModManifest manifest =
+				withUnmetDependencies(attachBundle(assemble(mods, resolved, pages, restricted), config), mods);
+
+		lastReport = report(mods, manifest, resolved, config);
+
+		return manifest;
+	}
+
+	/**
+	 * Summarises the build so an operator can be shown totals rather than sent to the log.
+	 *
+	 * <p>Built from the finished manifest rather than from the resolution pass, so bundling —
+	 * which happens afterwards and is exactly what moves a file out of "install this
+	 * yourself" — is already accounted for.
+	 */
+	private static BuildReport report(List<ScannedMod> mods, ModManifest manifest,
+			Map<String, Resolution> resolved, ServerSyncConfig config) {
+		Map<String, Integer> bySource = new LinkedHashMap<>();
+		Set<String> bundled = new HashSet<>();
+		boolean embedded = !manifest.bundles().isEmpty();
+
+		for (ModBundle bundle : manifest.bundles()) {
+			bundle.contents().forEach(mod -> bundled.add(mod.fileName()));
+			embedded &= bundle.isEmbedded();
+		}
+
+		for (ScannedMod mod : mods) {
+			Resolution resolution = resolved.get(mod.sha1());
+
+			if (resolution != null) {
+				bySource.merge(resolution.source(), 1, Integer::sum);
+			}
+		}
+
+		List<String> authorRestricted = new ArrayList<>();
+		List<String> withPage = new ArrayList<>();
+		List<String> unknown = new ArrayList<>();
+
+		for (ManualEntry entry : manifest.unresolved()) {
+			if (entry.restricted()) {
+				authorRestricted.add(entry.fileName());
+			} else if (entry.pageUrl() != null && !entry.pageUrl().isBlank()) {
+				withPage.add(entry.fileName());
+			} else {
+				unknown.add(entry.fileName());
+			}
+		}
+
+		return new BuildReport(mods.size(), Map.copyOf(bySource), List.copyOf(bundled),
+				List.copyOf(authorRestricted), List.copyOf(withPage), List.copyOf(unknown),
+				manifest.unmetDependencies(), !config.curseforgeApiKey.isBlank(), embedded,
+				lastWithheld);
+	}
+
+	/**
+	 * Works out which dependencies no client will be able to obtain, and says so both in the
+	 * log and in the manifest.
+	 *
+	 * <p>A player who is missing an ordinary mod is told so and joins anyway, which is
+	 * deliberate: no amount of restarting fixes an unresolvable file, and blocking would only
+	 * trap them. A player missing a <em>dependency</em> is a different case entirely. They are
+	 * handed a mod that cannot start, and the next launch dies before any of our screens
+	 * exist — the crash names the library and never mentions the server, so nobody involved
+	 * has any reason to look here.
+	 *
+	 * <p>This runs after {@code attachBundle} on purpose. Bundling is exactly what turns an
+	 * undeliverable file into a deliverable one, and computing this first would warn about
+	 * dependencies the operator had already solved.
+	 *
+	 * <p>Two different gaps are reported, and the second was found by watching a real client
+	 * crash on a server this said nothing about:
+	 *
+	 * <ol>
+	 * <li>The dependency is a file in this folder that no client can obtain — bundled nowhere,
+	 * carried by no platform.
+	 * <li>The dependency is not here <em>at all</em>, and nothing this server loads provides
+	 * it either. A dedicated server only enforces dependencies its own side needs, so a mod
+	 * declaring {@code side="CLIENT"} on one it lacks starts here perfectly and takes down
+	 * every client that installs it. That is invisible from the server's own health — it is
+	 * running fine — and it is exactly the case where nobody thinks to look here.
+	 * </ol>
+	 *
+	 * <p>What is deliberately <em>not</em> reported is a dependency that is absent as a file
+	 * but present in {@link Loader#loadedModIds()}: that is a nested jar-in-jar library
+	 * travelling inside something the client is already getting, and flagging those would
+	 * bury both real cases under dozens of false ones.
+	 */
+	private static ModManifest withUnmetDependencies(ModManifest manifest, List<ScannedMod> mods) {
+		Set<String> deliverable = manifest.entries().stream()
+				.map(ModEntry::fileName)
+				.collect(Collectors.toCollection(HashSet::new));
+
+		manifest.bundles().forEach(bundle ->
+				bundle.contents().forEach(mod -> deliverable.add(mod.fileName())));
+
+		Map<String, String> fileByModId = new HashMap<>();
+
+		for (ScannedMod mod : mods) {
+			if (mod.modId() != null && !mod.modId().isBlank()) {
+				fileByModId.put(ModIds.normalise(mod.modId()), mod.fileName());
+			}
+		}
+
+		// Includes nested jar-in-jar mods, which is the whole reason it is consulted here.
+		// Normalised, because a Forge mod id cannot contain a hyphen: Sinytra Connector loads
+		// "fabric-api-base" and this server then reports running "fabric_api_base". Comparing
+		// the two spellings literally accused three present libraries of being missing.
+		Set<String> loadedHere = new HashSet<>();
+		Loader.INSTANCE.loadedModIds().forEach(id -> loadedHere.add(ModIds.normalise(id)));
+
+		boolean connectorPresent = loadedHere.contains("connectormod") || loadedHere.contains("connector");
+
+		Map<String, List<String>> unmet = new LinkedHashMap<>();
+
+		for (ScannedMod mod : mods) {
+			if (!deliverable.contains(mod.fileName()) || !mod.side().requiredOnClient()) {
+				continue;
+			}
+
+			for (String required : mod.requires()) {
+				String file = fileByModId.get(ModIds.normalise(required));
+
+				if (file != null && deliverable.contains(file)) {
+					continue;
+				}
+
+				if (file == null) {
+					// Not a file here. Nested inside something the client is getting anyway is
+					// the common, harmless case; genuinely absent is the one that crashes them.
+					if (loadedHere.contains(ModIds.normalise(required))) {
+						continue;
+					}
+
+					// Under Connector, an id declared on the Fabric side is not the id anything
+					// ends up running under. Connector rewrites them, and not only by spelling:
+					// "cloth-config2" is satisfied here by "cloth_config", and "fabric" by the
+					// Forgified Fabric API. We cannot model that mapping, and guessing produced
+					// five false accusations for every true one on the server this was measured
+					// against — so on a Connector server, Fabric-declared dependencies get no
+					// opinion. Forge-declared ones still do, which is where the real case was.
+					if (connectorPresent && mod.loaders().contains("fabric")) {
+						AutoModFetcher.LOGGER.debug(
+								"{} declares a Fabric dependency on {}; Connector remaps those, so "
+										+ "no conclusion is drawn", mod.fileName(), required);
+						continue;
+					}
+
+					unmet.computeIfAbsent(required, key -> new ArrayList<>()).add(mod.fileName());
+
+					// The advice is deliberately one-sided. A dependency still missing on a
+					// server that started is a client-side one by elimination — a server-side
+					// one would have stopped it — and the mod supplying it is therefore a
+					// client mod. Telling an operator to install a client mod on a dedicated
+					// server is bad advice twice over: it does not belong there, and plenty of
+					// them refuse to load without a client at all.
+					AutoModFetcher.LOGGER.warn(
+							"{} needs {}, which is nowhere on this server. This server starts "
+									+ "anyway because a dedicated server does not enforce a "
+									+ "client-side dependency — but every client that installs {} "
+									+ "will fail to launch. Add \"{}\" to excludeFileNames so it is "
+									+ "not offered to players; anyone who wants it can install it "
+									+ "with {} themselves.",
+							mod.fileName(), required, mod.fileName(), mod.fileName(), required);
+					continue;
+				}
+
+				unmet.computeIfAbsent(required, key -> new ArrayList<>()).add(mod.fileName());
+
+				AutoModFetcher.LOGGER.warn(
+						"{} needs {} ({}), which no player can obtain. They will download {} and "
+								+ "their game will fail to start. Bundle it with /automodfetcher "
+								+ "bundle, give it a manualUrls entry, or drop both mods.",
+						mod.fileName(), required, file, mod.fileName());
+			}
+		}
+
+		if (unmet.isEmpty()) {
+			lastWithheld = List.of();
+			return manifest;
+		}
+
+		Map<String, List<String>> frozen = new LinkedHashMap<>();
+		unmet.forEach((modId, needers) -> frozen.put(modId, List.copyOf(needers)));
+
+		// Offering these is never the right answer. A client that installs one of them does
+		// not get a slightly incomplete game; it gets a game that will not start, and the
+		// crash names a library rather than the server it came from. Withholding is strictly
+		// better than that: the mod is one no client can run anyway, and a player who is
+		// simply without it can still join. If the server genuinely needs it, the server's own
+		// refusal will say so, in its own words, which are more accurate than ours.
+		Set<String> withhold = new LinkedHashSet<>();
+		frozen.values().forEach(withhold::addAll);
+
+		List<ModEntry> offered = manifest.entries().stream()
+				.filter(entry -> !withhold.contains(entry.fileName()))
+				.toList();
+
+		for (String fileName : withhold) {
+			AutoModFetcher.LOGGER.warn("Not offering {} to players: it cannot start without a "
+					+ "dependency nobody can obtain, so installing it would break their game rather "
+					+ "than complete it.", fileName);
+		}
+
+		lastWithheld = List.copyOf(withhold);
+
+		return new ModManifest(offered, manifest.unresolved(), manifest.bundles(),
+				manifest.serverModIds(), Map.copyOf(frozen));
 	}
 
 	/**
@@ -201,8 +419,33 @@ public final class ManifestBuilder {
 					bundle.url());
 		}
 
+		// Which bundled files already have a project page under the same identity. Free to
+		// work out — the lookup happened during resolution and the answer is sitting on the
+		// entry — and it is the only difference visible from here between an operator's own
+		// private build and a tampered copy of a public mod.
+		Map<String, String> bundledPages = new LinkedHashMap<>();
+		Set<String> inBundle = bundle.contents().stream()
+				.map(BundledMod::fileName)
+				.collect(Collectors.toSet());
+
+		for (ManualEntry entry : manifest.unresolved()) {
+			if (inBundle.contains(entry.fileName()) && entry.hasPage()) {
+				bundledPages.put(entry.fileName(), entry.pageUrl());
+			}
+		}
+
+		if (!bundledPages.isEmpty()) {
+			AutoModFetcher.LOGGER.warn(
+					"{} file(s) in your bundle already exist as a project on a platform: {}. If those "
+							+ "are your own builds, nothing is wrong. If you did not build them, ask "
+							+ "why this server is handing out its own copy of a published mod rather "
+							+ "than letting players get it from the author.",
+					bundledPages.size(), String.join(", ", bundledPages.keySet()));
+		}
+
 		ModManifest offered = new ModManifest(manifest.entries(), List.copyOf(stillManual),
-				List.of(bundle), manifest.serverModIds());
+				List.of(bundle), manifest.serverModIds(), manifest.unmetDependencies(),
+				Map.copyOf(bundledPages));
 
 		// An embedded bundle shares one packet with everything else in the list, and that packet
 		// has a hard ceiling. Measuring the finished thing is the only honest check: the limit
@@ -256,20 +499,24 @@ public final class ManifestBuilder {
 		// Second pass: a jar Modrinth does not know by hash is usually the CurseForge
 		// packaging of a release Modrinth does have. Look it up by mod id and version.
 		String gameVersion = AutoModFetcher.minecraftVersion();
-		String loaderId = Loader.INSTANCE.packLoaderId();
 
 		for (ScannedMod mod : needLookup) {
 			if (resolved.containsKey(mod.sha1())) {
 				continue;
 			}
 
-			ModrinthResolver.Lookup lookup = ModrinthResolver.resolveByModVersion(http, mod.modId(),
-					mod.modVersion(), gameVersion, loaderId);
+			for (String loaderId : loadersToTry(mod)) {
+				ModrinthResolver.Lookup lookup = ModrinthResolver.resolveByModVersion(http, mod.modId(),
+						mod.modVersion(), gameVersion, loaderId);
 
-			if (lookup.resolution() != null) {
-				resolved.put(mod.sha1(), lookup.resolution());
-			} else if (lookup.projectPage() != null) {
-				pages.put(mod.sha1(), lookup.projectPage());
+				if (lookup.resolution() != null) {
+					resolved.put(mod.sha1(), lookup.resolution());
+					break;
+				}
+
+				if (lookup.projectPage() != null) {
+					pages.put(mod.sha1(), lookup.projectPage());
+				}
 			}
 		}
 
@@ -297,6 +544,89 @@ public final class ManifestBuilder {
 				cache.putMiss(mod.sha1(), pages.get(mod.sha1()));
 			}
 		}
+	}
+
+	/**
+	 * Which loader to ask a platform about for one particular jar.
+	 *
+	 * <p>Not the loader we are running on. A Forge or NeoForge server running Sinytra
+	 * Connector has Fabric jars in its mods folder legitimately, and asking Modrinth for the
+	 * "forge build" of a Fabric-only mod finds nothing, because nothing of the sort exists —
+	 * so every one of them was reported to players as "install this yourself" no matter how
+	 * available it actually was.
+	 *
+	 * <p>The jar's own metadata answers this: which file it carries says which loaders it was
+	 * built for. Where it says nothing we fall back to this build's loader, which is the old
+	 * behaviour and the right guess for a jar we could not read.
+	 *
+	 * <p>Ordered so the loader we are actually running comes first: for a jar built for both
+	 * Forge and NeoForge, the build matching this server is the one to prefer.
+	 */
+	/**
+	 * Whether a substitute build may stand in for the file this server actually runs.
+	 *
+	 * <p>An equivalent build is identified by mod id and declared version, and that identity
+	 * holds only as far as the declared version does. It is written by the mod's author into
+	 * the jar and is not checked by anything, so a jar can and does say one version while
+	 * being another — at which point "the release with the same version number" is a different
+	 * mod build, and offering it hands every player something the server is not running.
+	 *
+	 * <p>Two ways it can still be trusted. The obvious one: the platform's file has the same
+	 * name as ours, so whatever the metadata says, it is the same file. Otherwise the declared
+	 * version must at least appear in our own file name — agreement between the two things the
+	 * author wrote independently, which is weak evidence but the only evidence there is.
+	 *
+	 * <p>Measured against a real 258-mod manifest: of 23 substitutions, 20 agreed, one was the
+	 * same file under a {@code +forge} suffix, and two were wrong. {@code nanny-1.0.6.jar}
+	 * declared 1.0.1 and would have downgraded every client. {@code
+	 * youre-in-grave-danger-forge-1.20.1-2.0.19.jar} declared 2.0.16, and 2.0.16 exists on
+	 * Modrinth as a Fabric build only — so a Forge server sent its players the Fabric jar under
+	 * the Forge jar's name. The two register different {@code yigd:main} channel versions, and
+	 * the server rejected every client that installed it: "Channels [yigd:main] rejected their
+	 * client side version number". Nothing else in the manifest was wrong, and no message
+	 * anyone saw named the mod.
+	 */
+	private static boolean isTrustworthyRebuild(ScannedMod mod, Resolution resolution) {
+		String theirs = fileNameOf(resolution.url());
+
+		if (theirs != null && theirs.equalsIgnoreCase(mod.fileName())) {
+			return true;
+		}
+
+		String version = mod.modVersion();
+
+		return version != null && !version.isBlank() && mod.fileName().contains(version);
+	}
+
+	/** The last path segment of a URL, or null when there is nothing that looks like one. */
+	private static String fileNameOf(String url) {
+		if (url == null || url.isBlank()) {
+			return null;
+		}
+
+		int slash = url.lastIndexOf('/');
+		String name = slash < 0 ? url : url.substring(slash + 1);
+		int query = name.indexOf('?');
+
+		return query < 0 ? name : name.substring(0, query);
+	}
+
+	private static List<String> loadersToTry(ScannedMod mod) {
+		String own = Loader.INSTANCE.packLoaderId();
+
+		if (mod.loaders().isEmpty()) {
+			return List.of(own);
+		}
+
+		List<String> ordered = new ArrayList<>();
+
+		if (mod.loaders().contains(own)) {
+			ordered.add(own);
+		}
+
+		mod.loaders().stream().filter(loader -> !loader.equals(own)).sorted().forEach(ordered::add);
+
+		return ordered;
 	}
 
 	private static Map<Long, String> fingerprint(List<ScannedMod> mods) {
@@ -330,6 +660,16 @@ public final class ManifestBuilder {
 			}
 
 			if (resolution.isRebuild()) {
+				if (!isTrustworthyRebuild(mod, resolution)) {
+					AutoModFetcher.LOGGER.warn("Not offering {} as an equivalent build: this server runs"
+							+ " it, but the file that matches its declared version {} is {}. Sending that"
+							+ " would put a different build on every client. Bundle this file instead.",
+							mod.fileName(), mod.modVersion(), fileNameOf(resolution.url()));
+					unresolved.add(ManualEntry.of(mod.fileName(), mod.sha512(), pages.get(mod.sha1()),
+							restricted.contains(mod.sha1())));
+					continue;
+				}
+
 				// Clients get an equivalent build rather than the server's exact bytes, so
 				// every hash on the entry has to describe the file being fetched. Leaving the
 				// local SHA-1 in place produced an entry that half-described each file, which
