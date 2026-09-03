@@ -4,7 +4,7 @@
 mod.id = "automodfetcher"
 mod.name = "AutoModFetcher"
 mod.group = "com.corncan.automodfetcher"
-mod.version = "0.2.0"
+mod.version = "0.2.9"
 
 deps.fabric_loader = "0.17.3"
 loomx.loom_version = "1.14-SNAPSHOT"
