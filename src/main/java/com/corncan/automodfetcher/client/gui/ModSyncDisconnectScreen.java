@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.corncan.automodfetcher.client.ClientConfig;
+import com.corncan.automodfetcher.client.DisconnectReasons;
 import com.corncan.automodfetcher.client.PendingDiagnosis;
 import com.corncan.automodfetcher.client.SyncPlan;
 import com.corncan.automodfetcher.network.ManualEntry;
@@ -32,20 +33,26 @@ public class ModSyncDisconnectScreen extends Screen {
 	private static final int REASON_TOP = 34;
 	private static final int REASON_LINE_HEIGHT = 10;
 
-	/** Server messages run long — an unhandled exception's text is often a full paragraph. */
-	private static final int REASON_MAX_LINES = 3;
+	/**
+	 * Server messages run long — an unhandled exception's text is often a full paragraph, and
+	 * three lines cut the real one off before the part that named the mods involved.
+	 */
+	private static final int REASON_MAX_LINES = 6;
 
 	private final PendingDiagnosis diagnosis;
 	private final Component serverReason;
+	private final DisconnectReasons.Explanation explanation;
 	private final LineList list = new LineList();
 
 	private MultiLineLabel reasonLines = MultiLineLabel.EMPTY;
 	private int causeY;
 
-	public ModSyncDisconnectScreen(PendingDiagnosis diagnosis, Component serverReason) {
+	public ModSyncDisconnectScreen(PendingDiagnosis diagnosis, Component serverReason,
+			DisconnectReasons.Explanation explanation) {
 		super(Component.translatable("automodfetcher.kicked.title"));
 		this.diagnosis = diagnosis;
 		this.serverReason = serverReason;
+		this.explanation = explanation;
 	}
 
 	@Override
@@ -88,6 +95,58 @@ public class ModSyncDisconnectScreen extends Screen {
 
 	private List<LineList.Line> buildLines() {
 		List<LineList.Line> lines = new ArrayList<>();
+
+		// First, because it is the only part that can speak to a drop nothing was missing for.
+		if (explanation != null) {
+			lines.add(LineList.Line.of(Component.translatable(explanation.messageKey()),
+					LineList.Line.WHITE));
+
+			if (!explanation.mods().isEmpty()) {
+				lines.add(LineList.Line.of(Component.translatable("automodfetcher.kicked.cause.mods_named",
+						String.join(", ", explanation.mods())), LineList.Line.YELLOW));
+			}
+
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		// First of the findings, because it is the only one the player can fix by flipping a
+		// switch — the mods are already on the disk. Everything below needs a download, a
+		// deletion, or somebody else's website.
+		if (!diagnosis.reenable().isEmpty()) {
+			lines.add(LineList.Line.of(Component.translatable(
+					"automodfetcher.kicked.reenable", diagnosis.reenable().size()),
+					LineList.Line.RED));
+
+			for (String fileName : diagnosis.reenable()) {
+				lines.add(LineList.Line.of(Component.literal("  " + fileName), LineList.Line.RED));
+			}
+
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		if (!diagnosis.foreign().isEmpty()) {
+			lines.add(LineList.Line.of(Component.translatable(
+					"automodfetcher.confirm.section.foreign", diagnosis.foreign().size()),
+					LineList.Line.YELLOW));
+
+			for (String fileName : diagnosis.foreign()) {
+				lines.add(LineList.Line.of(Component.literal("  " + fileName), LineList.Line.YELLOW));
+			}
+
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		if (!diagnosis.missingDependencies().isEmpty()) {
+			lines.add(LineList.Line.of(Component.translatable(
+					"automodfetcher.confirm.section.missing_dependency",
+					diagnosis.missingDependencies().size()), LineList.Line.RED));
+
+			for (SyncPlan.MissingDependency missing : diagnosis.missingDependencies()) {
+				lines.add(LineList.Line.of(Component.literal("  " + missing.modId()), LineList.Line.RED));
+			}
+
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
 
 		if (!diagnosis.manual().isEmpty()) {
 			lines.add(LineList.Line.of(Component.translatable("automodfetcher.kicked.missing"), LineList.Line.YELLOW));
@@ -141,6 +200,10 @@ public class ModSyncDisconnectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
+		if (list.mouseClicked(mouseX, mouseY)) {
+			return true;
+		}
+
 		String url = list.urlAt(mouseX, mouseY);
 
 		if (url != null && this.minecraft != null) {
@@ -168,6 +231,17 @@ public class ModSyncDisconnectScreen extends Screen {
 		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
 	}
 	*///?} else {
+	@Override
+	public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+		return list.mouseDragged(mouseY) || super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+	}
+
+	@Override
+	public boolean mouseReleased(double mouseX, double mouseY, int button) {
+		list.mouseReleased();
+		return super.mouseReleased(mouseX, mouseY, button);
+	}
+
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
 		if (list.mouseScrolled(amount)) {

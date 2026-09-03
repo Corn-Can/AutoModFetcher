@@ -5,7 +5,6 @@ import com.corncan.automodfetcher.PendingOpsHandoff;
 import com.corncan.automodfetcher.client.gui.ModSyncDisconnectScreen;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.DisconnectedScreen;
 
 /**
  * Client startup and the one hook it needs, with no loader in sight.
@@ -39,6 +38,10 @@ public final class ClientSetup {
 	}
 
 	public static void tick(Minecraft client) {
+		if (client.level != null) {
+			ClientSession.notePlaying();
+		}
+
 		maybeExplainDisconnect(client);
 		ClientScreenQueue.tick(client);
 	}
@@ -53,16 +56,46 @@ public final class ClientSetup {
 	 * which is earlier than that. The screen appears either way.
 	 */
 	private static void maybeExplainDisconnect(Minecraft client) {
-		if (!(client.screen instanceof DisconnectedScreen)) {
+		if (!ClientScreenQueue.isDisconnectScreen(client.screen)) {
 			return;
 		}
 
+		// Forge's own mod-mismatch screen already names the mods that did not match, which is
+		// more than a recognised message shape would tell anyone. Replacing it is only an
+		// improvement when we can say something it cannot — which mods are sitting switched
+		// off on this disk, and that turning them on is the fix.
+		boolean vanilla = ClientScreenQueue.isVanillaDisconnectScreen(client.screen);
+
 		PendingDiagnosis diagnosis = ClientSession.takeDiagnosis();
 
-		if (diagnosis != null && diagnosis.isRelevantNow()) {
-			AutoModFetcher.LOGGER.info("Dropped after joining without {} mod(s); explaining why",
-					diagnosis.manual().size() + diagnosis.blocked().size());
-			ClientScreenQueue.showWithReason(reason -> new ModSyncDisconnectScreen(diagnosis, reason));
+		if (diagnosis == null || !diagnosis.isRelevantNow()) {
+			return;
 		}
+
+		// The decision is deferred into the factory because it needs the server's own words,
+		// and those only exist once the disconnect screen is up. Two things can justify
+		// replacing that screen: something we already knew was missing, or a message whose
+		// shape we recognise. With neither, vanilla's screen is the better one to leave alone.
+		ClientScreenQueue.showWithReason(reason -> {
+			String said = reason.getString();
+
+			// Logged before anything is decided about it, and logged even when we go on to
+			// leave vanilla's screen alone. What the server said is the only evidence of why
+			// a player was dropped, and it survives nowhere else.
+			AutoModFetcher.LOGGER.info("The server's parting words: {}", DisconnectReasons.forLog(said));
+
+			DisconnectReasons.Explanation explanation = DisconnectReasons.explain(said);
+
+			if (!diagnosis.hasFindings() && (explanation == null || !vanilla)) {
+				return null;
+			}
+
+			AutoModFetcher.LOGGER.info("Explaining a disconnect: {} finding(s), reason {}",
+					diagnosis.manual().size() + diagnosis.blocked().size() + diagnosis.foreign().size()
+							+ diagnosis.missingDependencies().size() + diagnosis.reenable().size(),
+					explanation == null ? "not recognised" : explanation.messageKey());
+
+			return new ModSyncDisconnectScreen(diagnosis, reason, explanation);
+		});
 	}
 }

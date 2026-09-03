@@ -24,6 +24,9 @@ public final class ClientSession {
 	/** Set when we let a player through knowing mods were missing; used to explain a drop. */
 	private static volatile PendingDiagnosis diagnosis;
 
+	/** Whether {@link #notePlaying()} has already restarted the clock for this join. */
+	private static volatile boolean playing;
+
 	private ClientSession() {
 	}
 
@@ -49,6 +52,23 @@ public final class ClientSession {
 	/** Called when the player themselves chose to go ahead without every mod. */
 	public static void rememberDiagnosis(SyncPlan plan) {
 		diagnosis = plan == null ? null : PendingDiagnosis.of(plan);
+		playing = false;
+	}
+
+	/**
+	 * Restarts the diagnosis window at the moment the player is actually in a world.
+	 *
+	 * <p>Called every tick and does something exactly once per join. The plan is settled during
+	 * login, which on a large modpack is a long way before the world finishes loading; keeping
+	 * the clock from that earlier point spent the window on a loading screen.
+	 */
+	public static void notePlaying() {
+		PendingDiagnosis current = diagnosis;
+
+		if (current != null && !playing) {
+			playing = true;
+			diagnosis = current.playStarted();
+		}
 	}
 
 	//? if >=1.20.2 {
