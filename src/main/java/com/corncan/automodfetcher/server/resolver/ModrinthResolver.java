@@ -127,6 +127,34 @@ public final class ModrinthResolver {
 			return Lookup.NOTHING;
 		}
 
+		Lookup direct = lookUp(http, modId, modVersion, gameVersion, loaderId);
+
+		if (direct != Lookup.NOTHING) {
+			return direct;
+		}
+
+		// A mod id is not a Modrinth slug, and the commonest way they differ is punctuation:
+		// ids conventionally use underscores where slugs use hyphens. Measured on a 310-mod
+		// server, this one substitution is the difference between a handful of mods coming off
+		// a platform CDN and the operator hosting them personally — which also means
+		// redistributing them without anything having checked that their authors allow it.
+		//
+		// Deliberately the only transformation tried. Anything fuzzier — a search, a
+		// prefix match — can land on a different project altogether, and the punishment for
+		// that is installing an unrelated mod under a name that looks right. The version still
+		// has to match afterwards, so this narrows the search without widening what counts as
+		// a hit.
+		String slug = modId.replace('_', '-');
+
+		if (slug.equals(modId)) {
+			return Lookup.NOTHING;
+		}
+
+		return lookUp(http, slug, modVersion, gameVersion, loaderId);
+	}
+
+	private static Lookup lookUp(HttpClient http, String modId, String modVersion,
+			String gameVersion, String loaderId) {
 		try {
 			String uri = "https://api.modrinth.com/v2/project/"
 					+ URLEncoder.encode(modId, StandardCharsets.UTF_8)

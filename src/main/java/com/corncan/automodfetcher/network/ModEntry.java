@@ -1,5 +1,7 @@
 package com.corncan.automodfetcher.network;
 
+import com.corncan.automodfetcher.util.ModIds;
+
 import net.minecraft.network.FriendlyByteBuf;
 
 /**
@@ -23,12 +25,19 @@ public record ModEntry(String fileName, String sha1, String sha512, long size, S
 		return versionKey(modId, version);
 	}
 
+	/**
+	 * <p>The id is normalised, because the two ends do not spell it the same way. A server
+	 * running Sinytra Connector reports {@code faster_random} for the very jar that declares
+	 * itself {@code faster-random}, so comparing the raw strings made this key never match on
+	 * exactly the servers that need it — every equivalent build was offered for download again,
+	 * silently, however many copies of that version the player already had.
+	 */
 	public static String versionKey(String modId, String version) {
 		if (modId == null || modId.isBlank() || version == null || version.isBlank()) {
 			return null;
 		}
 
-		return modId + "@" + version;
+		return ModIds.normalise(modId) + "@" + version;
 	}
 
 	public void write(FriendlyByteBuf buf) {
