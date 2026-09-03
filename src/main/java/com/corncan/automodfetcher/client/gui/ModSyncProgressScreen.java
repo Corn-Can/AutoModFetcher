@@ -136,6 +136,22 @@ public class ModSyncProgressScreen extends Screen {
 	}
 	*///?} else {
 	@Override
+	public boolean mouseClicked(double mouseX, double mouseY, int button) {
+		return list.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
+	}
+
+	@Override
+	public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+		return list.mouseDragged(mouseY) || super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+	}
+
+	@Override
+	public boolean mouseReleased(double mouseX, double mouseY, int button) {
+		list.mouseReleased();
+		return super.mouseReleased(mouseX, mouseY, button);
+	}
+
+	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
 		if (list.mouseScrolled(amount)) {
 			return true;

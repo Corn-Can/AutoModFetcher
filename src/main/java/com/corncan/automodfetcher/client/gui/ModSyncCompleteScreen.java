@@ -7,6 +7,8 @@ import com.corncan.automodfetcher.client.SyncPlan;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 
@@ -23,6 +25,9 @@ public class ModSyncCompleteScreen extends Screen {
 
 	private boolean removalPending;
 
+	/** {@code init} runs again on every resize; the cue is for arriving, not for resizing. */
+	private boolean announced;
+
 
 	public ModSyncCompleteScreen(DownloadSession session) {
 		super(Component.translatable("automodfetcher.complete.title"));
@@ -35,6 +40,18 @@ public class ModSyncCompleteScreen extends Screen {
 		int secondaryY = this.height / 2 + 54;
 
 		removalPending = PendingOps.load().hasWork();
+
+		// Nine hundred megabytes is long enough that nobody watches it. Two different sounds
+		// rather than one, because "it finished" and "it finished badly" are the two things
+		// somebody who walked away needs to be able to tell apart from the next room.
+		if (!announced && this.minecraft != null) {
+			announced = true;
+			this.minecraft.getSoundManager().play(SimpleSoundInstance.forUI(
+					session.failureCount() > 0
+							? SoundEvents.VILLAGER_NO
+							: SoundEvents.UI_TOAST_CHALLENGE_COMPLETE,
+					1.0F));
+		}
 
 		// Closing is the only thing offered, on every loader. Relaunching the game from inside
 		// the game was never dependable — a launcher that supervises its children defeats it,

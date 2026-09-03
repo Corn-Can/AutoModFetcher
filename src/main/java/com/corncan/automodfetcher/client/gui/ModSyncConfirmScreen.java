@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.PendingOpsApplier;
 import com.corncan.automodfetcher.client.ClientConfig;
 import com.corncan.automodfetcher.client.ClientSession;
@@ -28,6 +29,8 @@ import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.network.chat.Component;
@@ -51,6 +54,24 @@ public class ModSyncConfirmScreen extends Screen {
 
 	private boolean sharedInstall;
 	private Checkbox rememberChoice;
+
+	/**
+	 * Bundled files the player has ticked off, for this attempt only.
+	 *
+	 * <p>Only bundle members can be declined. Everything else on this screen comes from a
+	 * platform the author published to, and picking through those one at a time is how a
+	 * dependency gets left out and a game stops starting. What arrives in an operator's own
+	 * zip is the part with no such backing, so it is the part worth being able to refuse —
+	 * and refusing it is the only useful answer to a file this screen has just marked as
+	 * also being published somewhere the player could have got it from instead.
+	 */
+	private final Set<String> skipped = new java.util.HashSet<>();
+
+	/**
+	 * The key of the select-all row. A colon can never appear in a file name — the name guard
+	 * rejects it — so this cannot collide with one.
+	 */
+	private static final String ALL_KEY = "::all";
 
 	public ModSyncConfirmScreen(SyncPlan plan, ClientConfig config, SourcePolicy policy) {
 		super(Component.translatable("automodfetcher.confirm.title"));
@@ -114,13 +135,30 @@ public class ModSyncConfirmScreen extends Screen {
 				acceptLabel = Component.translatable("automodfetcher.confirm.accept");
 			}
 
+			// Three ways out, and the one that matters most is the one that was missing:
+			// joining regardless. Declining used to mean "cancel", which returns to the server
+			// list and puts this identical screen back up on the next attempt — no answer the
+			// player could give ever got them in. This mod exists to remove that wall, not to
+			// become it, and the roadmap already says as much about mods nobody can install:
+			// blocking only traps them. Not every mod on a server is needed to play on it, and
+			// nothing here can tell which — on Forge no jar even declares which side it is
+			// for — so the judgement belongs to the person whose game it is. If the server
+			// really does need one of them, the server refuses in its own words, and since the
+			// diagnosis is now armed on every join those words get explained rather than
+			// dumped raw.
 			this.addRenderableWidget(Button.builder(acceptLabel, button -> startDownload())
-					.bounds(this.width / 2 - 154, buttonY, 150, 20)
+					.bounds(this.width / 2 - 154, buttonY, 100, 20)
+					.build());
+
+			this.addRenderableWidget(Button.builder(
+					Component.translatable("automodfetcher.confirm.connect_anyway"),
+					button -> connectAnyway())
+					.bounds(this.width / 2 - 50, buttonY, 100, 20)
 					.build());
 
 			this.addRenderableWidget(Button.builder(
 					Component.translatable("automodfetcher.confirm.cancel"), button -> onClose())
-					.bounds(this.width / 2 + 4, buttonY, 150, 20)
+					.bounds(this.width / 2 + 54, buttonY, 100, 20)
 					.build());
 		} else {
 			// Nothing here is ours to install. Showing the list is still worth doing — it is
@@ -166,9 +204,36 @@ public class ModSyncConfirmScreen extends Screen {
 							bundle.contents().size(), ClientConfig.hostOf(bundle.url())),
 					LineList.Line.WHITE));
 
+			// Fifty rows is not a list anyone ticks one at a time; the common answers are all
+			// and none, and the individual rows are for the exception.
+			lines.add(LineList.Line.toggle(Component.translatable(skipped.isEmpty()
+					? "automodfetcher.confirm.bundle_skip_all"
+					: "automodfetcher.confirm.bundle_skip_none"), LineList.Line.LINK, ALL_KEY));
+
 			for (BundledMod mod : bundle.contents()) {
-				lines.add(LineList.Line.of(Component.literal("  " + mod.fileName()), LineList.Line.GREEN));
+				String page = plan.bundledPages().get(mod.fileName());
+				boolean skip = skipped.contains(mod.fileName());
+
+				// Marked, not accused. A mod ends up in a bundle because no platform carries
+				// this exact build, and an operator's own patched copy is the ordinary reason
+				// for that. It is also what a tampered copy of a published mod looks like from
+				// here, and the two are indistinguishable to us — but not to the person reading.
+				lines.add(LineList.Line.toggle(
+						Component.literal((skip ? "  [ ] " : "  [x] ") + mod.fileName()),
+						skip ? LineList.Line.GREY : (page == null ? LineList.Line.GREEN : LineList.Line.YELLOW),
+						mod.fileName()));
+
+				if (page != null) {
+					lines.add(LineList.Line.of(
+							Component.translatable("automodfetcher.confirm.bundle_also_published"),
+							LineList.Line.GREY));
+					lines.add(LineList.Line.link(
+							Component.translatable("automodfetcher.confirm.open_page", page), page));
+				}
 			}
+
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.bundle_skip_hint"), LineList.Line.GREY));
 
 			lines.add(LineList.Line.of(Component.translatable(bundle.isEmbedded()
 					? "automodfetcher.confirm.bundle_detail_direct"
@@ -213,6 +278,16 @@ public class ModSyncConfirmScreen extends Screen {
 			for (ManualEntry entry : plan.manual()) {
 				lines.add(LineList.Line.of(Component.literal("  " + entry.fileName()), LineList.Line.YELLOW));
 
+				// Otherwise this reads as being asked for a file already sitting in the folder.
+				// It is the same name and a different build, and the one they have is the one
+				// the server refuses — so saying nothing here leaves them stuck on a screen
+				// that looks wrong rather than one telling them what to change.
+				if (plan.replaces().contains(entry.fileName())) {
+					lines.add(LineList.Line.of(
+							Component.translatable("automodfetcher.confirm.manual.replaces"),
+							LineList.Line.RED));
+				}
+
 				// A file name alone leaves the player guessing what to search for.
 				if (entry.hasPage()) {
 					lines.add(LineList.Line.link(
@@ -221,6 +296,43 @@ public class ModSyncConfirmScreen extends Screen {
 				}
 			}
 
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		// Ahead of everything else and in red, because it is the only entry on this screen
+		// that predicts a game which will not start rather than one that is merely incomplete.
+		if (!plan.missingDependencies().isEmpty()) {
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.section.missing_dependency",
+							plan.missingDependencies().size()),
+					LineList.Line.RED));
+
+			for (SyncPlan.MissingDependency missing : plan.missingDependencies()) {
+				lines.add(LineList.Line.of(Component.literal("  " + missing.modId()), LineList.Line.RED));
+				lines.add(LineList.Line.of(
+						Component.translatable("automodfetcher.confirm.needed_by",
+								String.join(", ", missing.neededBy())),
+						LineList.Line.GREY));
+			}
+
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.missing_dependency_hint"),
+					LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		if (!plan.reenable().isEmpty()) {
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.section.reenable",
+							plan.reenable().size()),
+					LineList.Line.WHITE));
+
+			for (String fileName : plan.reenable()) {
+				lines.add(LineList.Line.of(Component.literal("  " + fileName), LineList.Line.GREY));
+			}
+
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.reenable_hint"), LineList.Line.GREY));
 			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
 		}
 
@@ -238,6 +350,31 @@ public class ModSyncConfirmScreen extends Screen {
 			lines.add(LineList.Line.of(Component.translatable("automodfetcher.confirm.foreign_hint",
 					PendingOpsApplier.disabledDir().getFileName().toString()), LineList.Line.GREY));
 			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+		}
+
+		// Above the "join anyway" note, because it is the one case where joining anyway does
+		// not mean a smaller game — it means one that will not start.
+		if (!plan.neededByLocal().isEmpty()) {
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+			lines.add(LineList.Line.of(Component.translatable(
+					"automodfetcher.confirm.section.needed_by_local", plan.neededByLocal().size()),
+					LineList.Line.RED));
+
+			for (String fileName : plan.neededByLocal()) {
+				lines.add(LineList.Line.of(Component.literal("  " + fileName), LineList.Line.RED));
+			}
+
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.needed_by_local_hint"),
+					LineList.Line.GREY));
+		}
+
+		// Said last, next to the button that acts on it.
+		if (!plan.downloads().isEmpty() || !plan.bundles().isEmpty()) {
+			lines.add(LineList.Line.of(Component.empty(), LineList.Line.GREY));
+			lines.add(LineList.Line.of(
+					Component.translatable("automodfetcher.confirm.connect_anyway_hint"),
+					LineList.Line.GREY));
 		}
 
 		if (!plan.deletions().isEmpty()) {
@@ -259,7 +396,7 @@ public class ModSyncConfirmScreen extends Screen {
 	 */
 	private void connectAnyway() {
 		SkipDecisions decisions = SkipDecisions.load();
-		decisions.accept(ClientSession.serverKey(), plan.unavailableSignature());
+		decisions.accept(ClientSession.serverKey(), plan.declineSignature());
 		ClientSession.rememberDiagnosis(plan);
 
 		ServerData server = ClientSession.lastServer();
@@ -280,6 +417,56 @@ public class ModSyncConfirmScreen extends Screen {
 		//?}
 	}
 
+	/**
+	 * The plan minus whatever the player ticked off.
+	 *
+	 * <p>A bundle whose every member was declined is dropped whole: the zip is one download,
+	 * and fetching sixty megabytes to unpack nothing out of it helps nobody.
+	 */
+	private SyncPlan withoutSkipped() {
+		if (skipped.isEmpty()) {
+			return plan;
+		}
+
+		List<ModBundle> kept = new ArrayList<>();
+
+		for (ModBundle bundle : plan.bundles()) {
+			List<BundledMod> wanted = bundle.contents().stream()
+					.filter(mod -> !skipped.contains(mod.fileName()))
+					.toList();
+
+			if (!wanted.isEmpty()) {
+				kept.add(new ModBundle(bundle.url(), bundle.sha512(), bundle.size(), wanted,
+						bundle.data()));
+			}
+		}
+
+		AutoModFetcher.LOGGER.info("Skipping {} bundled file(s) at the player's request: {}",
+				skipped.size(), String.join(", ", skipped));
+
+		return new SyncPlan(plan.downloads(), List.copyOf(kept), plan.blocked(), plan.deletions(),
+				plan.manual(), plan.hostsNeedingConsent(), plan.foreign(), plan.missingDependencies(),
+				plan.reenable(), plan.bundledPages(), plan.neededByLocal(), plan.replaces());
+	}
+
+	@Override
+	public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+		return list.mouseDragged(mouseY) || super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+	}
+
+	@Override
+	public boolean mouseReleased(double mouseX, double mouseY, int button) {
+		list.mouseReleased();
+		return super.mouseReleased(mouseX, mouseY, button);
+	}
+
+	private void click() {
+		if (this.minecraft != null) {
+			this.minecraft.getSoundManager().play(
+					SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+		}
+	}
+
 	private void openModsFolder() {
 		Util.getPlatform().openFile(ModPaths.modsDir().toFile());
 	}
@@ -298,7 +485,7 @@ public class ModSyncConfirmScreen extends Screen {
 			granted = policy.plus(Set.copyOf(plan.hostsNeedingConsent()));
 		}
 
-		DownloadSession session = new DownloadSession(plan, config, granted);
+		DownloadSession session = new DownloadSession(withoutSkipped(), config, granted);
 		session.start();
 
 		if (this.minecraft != null) {
@@ -342,6 +529,31 @@ public class ModSyncConfirmScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
+		if (list.mouseClicked(mouseX, mouseY)) {
+			return true;
+		}
+
+		String toggled = list.toggleAt(mouseX, mouseY);
+
+		if (toggled != null) {
+			if (ALL_KEY.equals(toggled)) {
+				if (skipped.isEmpty()) {
+					plan.bundles().forEach(bundle ->
+							bundle.contents().forEach(mod -> skipped.add(mod.fileName())));
+				} else {
+					skipped.clear();
+				}
+			} else if (!skipped.remove(toggled)) {
+				skipped.add(toggled);
+			}
+
+			// Hand-drawn rows are not widgets, so nothing plays the click for them. Silence on
+			// a control that visibly changed is the part that feels broken.
+			click();
+			list.setLines(buildLines());
+			return true;
+		}
+
 		String url = list.urlAt(mouseX, mouseY);
 
 		if (url != null && this.minecraft != null) {
