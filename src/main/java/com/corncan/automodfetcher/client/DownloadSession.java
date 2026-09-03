@@ -29,6 +29,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import com.corncan.automodfetcher.AutoModFetcher;
+import com.corncan.automodfetcher.ModsFolderState;
 import com.corncan.automodfetcher.PendingOps;
 import com.corncan.automodfetcher.network.BundledMod;
 import com.corncan.automodfetcher.network.ModBundle;
@@ -91,6 +92,9 @@ public class DownloadSession {
 	}
 
 	private final SyncPlan plan;
+
+	/** How many switched-off jars were turned back on, for the finished screen to report. */
+	private volatile int reenabled;
 	private final ClientConfig config;
 	private final SourcePolicy policy;
 	private final HttpClient http;
@@ -187,6 +191,8 @@ public class DownloadSession {
 	}
 
 	public void start() {
+		reenable();
+
 		int tasks = plan.downloads().size() + plan.bundles().size();
 		remaining.set(tasks);
 
@@ -208,6 +214,32 @@ public class DownloadSession {
 
 		for (ModBundle bundle : plan.bundles()) {
 			submit(() -> runOne(Target.of(bundle), temp -> extract(bundle, temp), keyOf(bundle)));
+		}
+	}
+
+	/**
+	 * Turns switched-off jars back on, by undoing the rename the launcher made.
+	 *
+	 * <p>Done here rather than deferred: a file wearing {@code .disabled} is not loaded, so
+	 * nothing holds it open and the rename cannot fail the way replacing a running jar does.
+	 * It still takes a restart to matter, which the finished screen already asks for.
+	 *
+	 * <p>A failure is reported and otherwise ignored. The player is left exactly as they
+	 * were — with the mod switched off — which is a state they chose once already.
+	 */
+	private void reenable() {
+		for (String fileName : plan.reenable()) {
+			Path off = ModPaths.modsDir().resolve(fileName + ClientModIndex.DISABLED_SUFFIX);
+			Path on = ModPaths.modsDir().resolve(fileName);
+
+			try {
+				Files.move(off, on, StandardCopyOption.REPLACE_EXISTING);
+				ModsFolderState.noteChanged();
+				reenabled++;
+				AutoModFetcher.LOGGER.info("Switched {} back on: this server needs it", fileName);
+			} catch (IOException e) {
+				AutoModFetcher.LOGGER.warn("Could not switch {} back on", fileName, e);
+			}
 		}
 	}
 
@@ -419,6 +451,8 @@ public class DownloadSession {
 
 			throw e;
 		}
+
+		ModsFolderState.noteChanged();
 
 		synchronized (completed) {
 			completed.put(fileName, sha512.toLowerCase(Locale.ROOT));
@@ -771,6 +805,11 @@ public class DownloadSession {
 		}
 	}
 
+	/** Switched-off jars this session turned back on. */
+	public int reenabledCount() {
+		return reenabled;
+	}
+
 	public int deletionCount() {
 		return plan.deletions().size();
 	}
@@ -819,7 +858,10 @@ public class DownloadSession {
 			}
 		}
 
+		// Missing dependencies are carried over unchanged: retrying downloads cannot conjure a
+		// file no platform has, and dropping them would make the retry look healthier than it is.
 		return new SyncPlan(unfinished, List.copyOf(bundles), List.of(), plan.deletions(), List.of(),
-				List.of(), plan.foreign());
+				List.of(), plan.foreign(), plan.missingDependencies(), List.of(), plan.bundledPages(),
+				plan.neededByLocal(), plan.replaces());
 	}
 }

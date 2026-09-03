@@ -42,10 +42,8 @@ public final class PendingOpsApplier {
 	 * they find out the hard way.
 	 */
 	public static boolean changedThisLaunch() {
-		return changed;
+		return ModsFolderState.changedThisLaunch();
 	}
-
-	private static volatile boolean changed;
 
 	public static void run() {
 		try {
@@ -81,7 +79,7 @@ public final class PendingOpsApplier {
 			try {
 				if (Files.deleteIfExists(target)) {
 					AutoModFetcher.LOGGER.info("Removed mod no longer required by the server: {}", fileName);
-					changed = true;
+					ModsFolderState.noteChanged();
 				}
 			} catch (IOException e) {
 				AutoModFetcher.LOGGER.warn("Could not remove {} yet (it may still be in use); "
@@ -107,7 +105,7 @@ public final class PendingOpsApplier {
 				Files.move(target, disabledDir().resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
 				AutoModFetcher.LOGGER.info("Moved {} to {} — this server does not run it", fileName,
 						disabledDir());
-				changed = true;
+				ModsFolderState.noteChanged();
 			} catch (IOException e) {
 				AutoModFetcher.LOGGER.warn("Could not move {} out of the mods folder yet "
 						+ "(it may still be in use); will retry on the next launch", fileName);

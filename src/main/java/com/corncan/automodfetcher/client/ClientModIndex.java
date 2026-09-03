@@ -32,6 +32,9 @@ import com.corncan.automodfetcher.util.ModPaths;
 public final class ClientModIndex {
 	private static final String CACHE_FILE_NAME = "local-index.json";
 
+	/** What the CurseForge app and Prism append to a jar they have switched off. */
+	public static final String DISABLED_SUFFIX = ".disabled";
+
 	private static volatile CompletableFuture<Index> future;
 
 	private ClientModIndex() {
@@ -43,11 +46,30 @@ public final class ClientModIndex {
 	 *                    about what is here and not only about what is missing
 	 */
 	public record Index(Set<String> sha512Hashes, Set<String> fileNames, Set<String> versionKeys,
-			List<LocalMod> localMods) {
+			List<LocalMod> localMods, Set<String> disabledFileNames) {
+
+		/**
+		 * @param disabledFileNames names of jars a launcher has switched off, without the
+		 *                          {@code .disabled} suffix it renames them with. The
+		 *                          CurseForge app and Prism both use that convention, and a
+		 *                          jar wearing it is present but not loading.
+		 */
+		public Index {
+		}
 	}
 
-	/** A jar sitting in the player's mods folder, as far as its own metadata describes it. */
-	public record LocalMod(String fileName, String modId, ModSide side) {
+	/**
+	 * A jar sitting in the player's mods folder, as far as its own metadata describes it.
+	 *
+	 * @param sideKnown whether this jar's metadata format can express a side at all. Forge and
+	 *                  NeoForge have nowhere to put one, so {@code side} there is our
+	 *                  assumption rather than the mod's answer — and acting on that assumption
+	 *                  is how every client-only mod on those loaders gets mistaken for a
+	 *                  leftover.
+	 * @param requires  mod ids this jar will not load without
+	 */
+	public record LocalMod(String fileName, String modId, ModSide side, boolean sideKnown,
+			Set<String> requires) {
 	}
 
 	/** Cached per file so an unchanged mods folder costs no hashing at all on later launches. */
@@ -62,6 +84,8 @@ public final class ClientModIndex {
 		public String modId;
 		public String version;
 		public String side;
+		public Boolean sideKnown;
+		public List<String> requires;
 	}
 
 	public static void beginScan() {
@@ -95,14 +119,28 @@ public final class ClientModIndex {
 		Set<String> fileNames = new HashSet<>();
 		Set<String> versionKeys = new HashSet<>();
 		List<LocalMod> localMods = new ArrayList<>();
+		Set<String> disabled = new HashSet<>();
 
 		if (!Files.isDirectory(modsDir)) {
-			return new Index(hashes, fileNames, versionKeys, List.of());
+			return new Index(hashes, fileNames, versionKeys, List.of(), Set.of());
 		}
 
 		try (Stream<Path> stream = Files.list(modsDir)) {
-			List<Path> jars = stream
-					.filter(Files::isRegularFile)
+			List<Path> present = stream.filter(Files::isRegularFile).toList();
+
+			// A jar the launcher has switched off is renamed, not removed. Without noticing
+			// that, it looks exactly like a jar the player never had — and the answer to those
+			// two is not the same: one wants downloading, the other only turning back on.
+			for (Path path : present) {
+				String name = path.getFileName().toString();
+
+				if (name.toLowerCase(Locale.ROOT).endsWith(DISABLED_SUFFIX)) {
+					disabled.add(name.substring(0, name.length() - DISABLED_SUFFIX.length())
+							.toLowerCase(Locale.ROOT));
+				}
+			}
+
+			List<Path> jars = present.stream()
 					.filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
 					.toList();
 
@@ -118,14 +156,19 @@ public final class ClientModIndex {
 					entry.size = size;
 					entry.lastModified = lastModified;
 
-					// An older cache has no side recorded, so it has to be re-read rather than
-					// trusted — a missing side would read as BOTH and flag a client-only mod.
+					// An older cache has no side or dependency list recorded, so it has to be
+					// re-read rather than trusted — a missing side would read as BOTH and flag
+					// a client-only mod, and a missing dependency list would let us move a
+					// library out from under the mod that needs it.
 					if (cached != null && cached.sha512 != null && cached.side != null
+							&& cached.requires != null && cached.sideKnown != null
 							&& cached.size == size && cached.lastModified == lastModified) {
 						entry.sha512 = cached.sha512;
 						entry.modId = cached.modId;
 						entry.version = cached.version;
 						entry.side = cached.side;
+						entry.sideKnown = cached.sideKnown;
+						entry.requires = cached.requires;
 					} else {
 						entry.sha512 = Hashing.sha512(jar);
 
@@ -133,13 +176,16 @@ public final class ClientModIndex {
 						entry.modId = metadata.modId();
 						entry.version = metadata.version();
 						entry.side = metadata.side().name();
+						entry.sideKnown = metadata.sideKnown();
+						entry.requires = List.copyOf(metadata.requires());
 					}
 
 					updated.byFileName.put(fileName, entry);
 
 					hashes.add(entry.sha512.toLowerCase(Locale.ROOT));
 					fileNames.add(fileName.toLowerCase(Locale.ROOT));
-					localMods.add(new LocalMod(fileName, entry.modId, sideOf(entry.side)));
+					localMods.add(new LocalMod(fileName, entry.modId, sideOf(entry.side),
+							Boolean.TRUE.equals(entry.sideKnown), Set.copyOf(entry.requires)));
 
 					String versionKey = ModEntry.versionKey(entry.modId, entry.version);
 
@@ -157,7 +203,7 @@ public final class ClientModIndex {
 		Json.writeQuietly(cachePath, updated);
 		AutoModFetcher.LOGGER.info("Indexed {} local mod file(s)", updated.byFileName.size());
 
-		return new Index(hashes, fileNames, versionKeys, List.copyOf(localMods));
+		return new Index(hashes, fileNames, versionKeys, List.copyOf(localMods), Set.copyOf(disabled));
 	}
 
 	private static ModSide sideOf(String name) {
@@ -168,7 +214,21 @@ public final class ClientModIndex {
 		}
 	}
 
-	/** Folds freshly downloaded files into the cache so the next launch does not rehash them. */
+	/**
+	 * Folds freshly downloaded files into the cache, and rebuilds the index that describes
+	 * this session.
+	 *
+	 * <p>Writing only the cache was not enough, and the gap was invisible until someone
+	 * reconnected without restarting: {@link #get()} hands back the index built at launch, so
+	 * a file installed a moment ago was still absent from it. The next connection re-planned
+	 * against that stale answer, offered the same download again, installed it again, and
+	 * offered it again — a loop the player can only leave by quitting, which is the one thing
+	 * the screen had just told them to do, for a reason that no longer applied.
+	 *
+	 * <p>The rescan is started rather than awaited. It costs a directory walk and, for the few
+	 * files just written, one metadata read each — the hashes are in the cache this method has
+	 * already updated.
+	 */
 	public static void recordDownloaded(Map<String, String> sha512ByFileName) {
 		Path cachePath = ModPaths.configDir().resolve(CACHE_FILE_NAME);
 		Cache cache = Json.read(cachePath, Cache.class, Cache::new);
@@ -192,5 +252,7 @@ public final class ClientModIndex {
 
 		cache.byFileName = merged;
 		Json.writeQuietly(cachePath, cache);
+
+		beginScan();
 	}
 }
