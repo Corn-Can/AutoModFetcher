@@ -67,9 +67,24 @@ public final class ClientModIndex {
 	 *                  is how every client-only mod on those loaders gets mistaken for a
 	 *                  leftover.
 	 * @param requires  mod ids this jar will not load without
+	 * @param provides  other ids this jar answers to. A dependency naming one of them is met
+	 *                  by this file, and comparing on {@code modId} alone misses that — which
+	 *                  is how a folder holding {@code balm} was told it was missing
+	 *                  {@code balm_fabric}.
 	 */
 	public record LocalMod(String fileName, String modId, ModSide side, boolean sideKnown,
-			Set<String> requires) {
+			Set<String> requires, Set<String> provides) {
+
+		/** Every name this file can be required under, the id included. */
+		public Set<String> ids() {
+			Set<String> all = new HashSet<>(provides);
+
+			if (modId != null && !modId.isBlank()) {
+				all.add(modId);
+			}
+
+			return all;
+		}
 	}
 
 	/** Cached per file so an unchanged mods folder costs no hashing at all on later launches. */
@@ -86,6 +101,7 @@ public final class ClientModIndex {
 		public String side;
 		public Boolean sideKnown;
 		public List<String> requires;
+		public List<String> provides;
 	}
 
 	public static void beginScan() {
@@ -156,12 +172,16 @@ public final class ClientModIndex {
 					entry.size = size;
 					entry.lastModified = lastModified;
 
-					// An older cache has no side or dependency list recorded, so it has to be
-					// re-read rather than trusted — a missing side would read as BOTH and flag
-					// a client-only mod, and a missing dependency list would let us move a
-					// library out from under the mod that needs it.
+					// An older cache has no side, dependency list or alias list recorded, so it
+					// has to be re-read rather than trusted — a missing side would read as BOTH
+					// and flag a client-only mod, a missing dependency list would let us move a
+					// library out from under the mod that needs it, and a missing alias list
+					// would report libraries this folder holds as absent. Every one of those is
+					// a wrong answer given confidently, so an incomplete entry is not a cheaper
+					// version of the right one.
 					if (cached != null && cached.sha512 != null && cached.side != null
 							&& cached.requires != null && cached.sideKnown != null
+							&& cached.provides != null
 							&& cached.size == size && cached.lastModified == lastModified) {
 						entry.sha512 = cached.sha512;
 						entry.modId = cached.modId;
@@ -169,6 +189,7 @@ public final class ClientModIndex {
 						entry.side = cached.side;
 						entry.sideKnown = cached.sideKnown;
 						entry.requires = cached.requires;
+						entry.provides = cached.provides;
 					} else {
 						entry.sha512 = Hashing.sha512(jar);
 
@@ -178,6 +199,7 @@ public final class ClientModIndex {
 						entry.side = metadata.side().name();
 						entry.sideKnown = metadata.sideKnown();
 						entry.requires = List.copyOf(metadata.requires());
+						entry.provides = List.copyOf(metadata.provides());
 					}
 
 					updated.byFileName.put(fileName, entry);
@@ -185,7 +207,8 @@ public final class ClientModIndex {
 					hashes.add(entry.sha512.toLowerCase(Locale.ROOT));
 					fileNames.add(fileName.toLowerCase(Locale.ROOT));
 					localMods.add(new LocalMod(fileName, entry.modId, sideOf(entry.side),
-							Boolean.TRUE.equals(entry.sideKnown), Set.copyOf(entry.requires)));
+							Boolean.TRUE.equals(entry.sideKnown), Set.copyOf(entry.requires),
+							Set.copyOf(entry.provides)));
 
 					String versionKey = ModEntry.versionKey(entry.modId, entry.version);
 

@@ -48,12 +48,19 @@ public interface Loader {
 	Set<String> loadedJarFileNames();
 
 	/**
-	 * Every mod id the loader has running, nested ones included.
+	 * Every id the loader answers to: mod ids, nested ones included, plus the aliases those
+	 * mods declare themselves as providing.
 	 *
 	 * <p>Unlike {@link #loadedJarFileNames()} this deliberately counts mods bundled inside
 	 * other jars. The question it answers is "does this side have this mod at all", and a mod
 	 * shipped inside its parent is just as present as one with its own file — a client that
 	 * called it missing would be wrong about it.
+	 *
+	 * <p>Aliases are here for the same reason. A dependency is written against a name, not
+	 * against a file, and Fabric lets a mod claim more than one: the jar running as
+	 * {@code fabric-api} is what satisfies a dependency on {@code fabric}. Answering with ids
+	 * alone made this report seven nested libraries and five aliased ones as absent from a
+	 * client that had all twelve loaded.
 	 */
 	Set<String> loadedModIds();
 
@@ -127,6 +134,10 @@ public interface Loader {
 
 			for (var container : loader.getAllMods()) {
 				ids.add(container.getMetadata().getId());
+
+				// Fabric is the only one of the three with aliases. Forge and NeoForge have no
+				// equivalent field, so their implementations below have nothing to add here.
+				ids.addAll(container.getMetadata().getProvides());
 			}
 
 			return ids;

@@ -22,8 +22,16 @@ public final class ServerModScanner {
 	private ServerModScanner() {
 	}
 
+	/**
+	 * @param provides other ids this jar answers to, so a dependency naming one of them is
+	 *                 already met by this file rather than missing from the folder
+	 * @param bundledIds mod ids travelling inside this jar. Sending the file sends these too,
+	 *                 so a dependency on one of them is met by delivering this — even on a
+	 *                 server that never loads the file and so cannot see them running
+	 */
 	public record ScannedMod(Path path, String fileName, String sha1, String sha512, long size, ModSide side,
-			String modId, String modVersion, Set<String> requires, Set<String> loaders) {
+			String modId, String modVersion, Set<String> requires, Set<String> provides,
+			Set<String> bundledIds, Set<String> loaders) {
 	}
 
 	/** A jar and what it says about itself, before anything has been decided about it. */
@@ -67,7 +75,8 @@ public final class ServerModScanner {
 
 				results.add(new ScannedMod(candidate.path(), candidate.fileName(), hashes.sha1(),
 						hashes.sha512(), hashes.size(), metadata.side(), metadata.modId(),
-						metadata.version(), metadata.requires(), metadata.loaders()));
+						metadata.version(), metadata.requires(), metadata.provides(),
+						JarMetadata.bundledIds(candidate.path()), metadata.loaders()));
 			} catch (IOException e) {
 				AutoModFetcher.LOGGER.warn("Could not hash {}, it will not be synced",
 						candidate.fileName(), e);

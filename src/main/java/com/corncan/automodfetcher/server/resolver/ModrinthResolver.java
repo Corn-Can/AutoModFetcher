@@ -153,8 +153,136 @@ public final class ModrinthResolver {
 		return lookUp(http, slug, modVersion, gameVersion, loaderId);
 	}
 
+	/**
+	 * The newest build of a mod that fits this server, asked for by id alone.
+	 *
+	 * <p>For a dependency there is no file to hash and no version to match: something the
+	 * server runs says it needs an id, and nothing anywhere has a copy. All that can be asked
+	 * is "what is the current build of this, for this game version and loader" — so this takes
+	 * the first release Modrinth lists, which is the newest.
+	 *
+	 * <p>That is a weaker claim than every other resolver here makes, and it is worth being
+	 * plain about why. The others start from bytes the operator already has and find the same
+	 * bytes on a platform. This one starts from a name and returns a file nobody has seen. The
+	 * declared version range is not consulted because {@link com.corncan.automodfetcher.util.JarMetadata}
+	 * keeps only the ids, so "newest" can in principle be newer than the mod that asked for
+	 * it wanted. It is still the best answer available, and the alternative on offer is a
+	 * client that will not launch.
+	 *
+	 * @return null when Modrinth has no such project, or none with a usable build here
+	 */
+	public static Supply resolveLatest(HttpClient http, String modId, String gameVersion,
+			String loaderId) {
+		if (modId == null || modId.isBlank()) {
+			return null;
+		}
+
+		Supply direct = latestOf(http, modId, gameVersion, loaderId);
+
+		if (direct != null) {
+			return direct;
+		}
+
+		// The same underscore-for-hyphen substitution resolveByModVersion explains, for the
+		// same reason and with the same limit: it is the only transformation tried.
+		String slug = modId.replace('_', '-');
+
+		return slug.equals(modId) ? null : latestOf(http, slug, gameVersion, loaderId);
+	}
+
+	/**
+	 * @param resolution where to get it and what it should hash to
+	 * @param fileName   the name Modrinth ships it under, so the jar lands with its own name
+	 * @param version    the release picked, for the record and for the client's version key
+	 */
+	public record Supply(Resolution resolution, String fileName, String version) {
+	}
+
+	private static Supply latestOf(HttpClient http, String modId, String gameVersion,
+			String loaderId) {
+		Releases releases = releasesOf(http, modId, gameVersion, loaderId);
+
+		if (releases == null || releases.versions() == null) {
+			return null;
+		}
+
+		for (JsonElement versionElement : releases.versions()) {
+			if (!versionElement.isJsonObject()) {
+				continue;
+			}
+
+			JsonObject version = versionElement.getAsJsonObject();
+			JsonObject file = chooseFile(version);
+			Resolution resolution = toResolution(file);
+
+			if (resolution == null || !file.has("filename")) {
+				continue;
+			}
+
+			JsonElement number = version.get("version_number");
+
+			return new Supply(resolution, file.get("filename").getAsString(),
+					number == null ? "" : number.getAsString());
+		}
+
+		return null;
+	}
+
 	private static Lookup lookUp(HttpClient http, String modId, String modVersion,
 			String gameVersion, String loaderId) {
+		Releases releases = releasesOf(http, modId, gameVersion, loaderId);
+
+		if (releases == null) {
+			return Lookup.NOTHING;
+		}
+
+		if (releases.versions() == null) {
+			return new Lookup(null, releases.projectPage());
+		}
+
+		for (JsonElement versionElement : releases.versions()) {
+			if (!versionElement.isJsonObject()) {
+				continue;
+			}
+
+			JsonObject version = versionElement.getAsJsonObject();
+			JsonElement number = version.get("version_number");
+
+			if (number == null || !VersionMatching.matches(modVersion, number.getAsString())) {
+				continue;
+			}
+
+			JsonObject file = chooseFile(version);
+			Resolution resolution = toResolution(file);
+
+			if (resolution != null) {
+				AutoModFetcher.LOGGER.info("Matched {} {} to Modrinth release {}", modId, modVersion,
+						number.getAsString());
+				return new Lookup(resolution, releases.projectPage());
+			}
+		}
+
+		return new Lookup(null, releases.projectPage());
+	}
+
+	/**
+	 * @param versions    the releases Modrinth listed, newest first, or null when the project
+	 *                    exists but its answer could not be read
+	 * @param projectPage where a player can be sent to fetch it by hand
+	 */
+	private record Releases(JsonArray versions, String projectPage) {
+	}
+
+	/**
+	 * The releases of one project that fit this game version and loader, or null when there is
+	 * no project to talk about.
+	 *
+	 * <p>Null and "no releases" are kept apart on purpose. A project that exists but has no
+	 * build for this game version still has a page worth sending someone to; a project that
+	 * does not exist has nothing. Collapsing the two lost the link.
+	 */
+	private static Releases releasesOf(HttpClient http, String modId, String gameVersion,
+			String loaderId) {
 		try {
 			String uri = "https://api.modrinth.com/v2/project/"
 					+ URLEncoder.encode(modId, StandardCharsets.UTF_8)
@@ -173,49 +301,22 @@ public final class ModrinthResolver {
 			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if (response.statusCode() == 404) {
-				return Lookup.NOTHING;
+				return null;
 			}
 
 			if (response.statusCode() != 200) {
 				AutoModFetcher.LOGGER.debug("Modrinth returned HTTP {} looking up {}", response.statusCode(), modId);
-				return Lookup.NOTHING;
+				return null;
 			}
 
 			// A 200 means the project exists, whatever versions it happens to carry.
-			String projectPage = "https://modrinth.com/mod/" + modId;
-			JsonArray versions = Json.GSON.fromJson(response.body(), JsonArray.class);
-
-			if (versions == null) {
-				return new Lookup(null, projectPage);
-			}
-
-			for (JsonElement versionElement : versions) {
-				if (!versionElement.isJsonObject()) {
-					continue;
-				}
-
-				JsonObject version = versionElement.getAsJsonObject();
-				JsonElement number = version.get("version_number");
-
-				if (number == null || !VersionMatching.matches(modVersion, number.getAsString())) {
-					continue;
-				}
-
-				Resolution resolution = firstFile(version);
-
-				if (resolution != null) {
-					AutoModFetcher.LOGGER.info("Matched {} {} to Modrinth release {}", modId, modVersion,
-							number.getAsString());
-					return new Lookup(resolution, projectPage);
-				}
-			}
-
-			return new Lookup(null, projectPage);
+			return new Releases(Json.GSON.fromJson(response.body(), JsonArray.class),
+					"https://modrinth.com/mod/" + modId);
 		} catch (Exception e) {
 			AutoModFetcher.LOGGER.debug("Modrinth lookup by id failed for {}", modId, e);
 		}
 
-		return Lookup.NOTHING;
+		return null;
 	}
 
 	/**
@@ -226,7 +327,8 @@ public final class ModrinthResolver {
 		static final Lookup NOTHING = new Lookup(null, null);
 	}
 
-	private static Resolution firstFile(JsonObject version) {
+	/** The jar out of a release that may also carry sources and extras. */
+	private static JsonObject chooseFile(JsonObject version) {
 		JsonElement filesElement = version.get("files");
 
 		if (filesElement == null || !filesElement.isJsonArray()) {
@@ -249,6 +351,10 @@ public final class ModrinthResolver {
 			}
 		}
 
+		return chosen;
+	}
+
+	private static Resolution toResolution(JsonObject chosen) {
 		if (chosen == null || !chosen.has("url") || !chosen.has("hashes")) {
 			return null;
 		}

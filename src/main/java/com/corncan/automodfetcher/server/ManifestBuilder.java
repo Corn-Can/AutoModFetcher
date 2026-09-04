@@ -20,6 +20,7 @@ import com.corncan.automodfetcher.network.ManualEntry;
 import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
+import com.corncan.automodfetcher.network.ModSide;
 import com.corncan.automodfetcher.platform.Loader;
 import com.corncan.automodfetcher.server.ServerModScanner.ScannedMod;
 import com.corncan.automodfetcher.server.export.BundleBuilder;
@@ -99,8 +100,9 @@ public final class ManifestBuilder {
 		cache.retainOnly(knownSha1);
 		cache.save();
 
-		ModManifest manifest =
-				withUnmetDependencies(attachBundle(assemble(mods, resolved, pages, restricted), config), mods);
+		ModManifest manifest = supplyMissingDependencies(
+				withUnmetDependencies(attachBundle(assemble(mods, resolved, pages, restricted), config), mods),
+				config);
 
 		lastReport = report(mods, manifest, resolved, config);
 
@@ -194,11 +196,41 @@ public final class ManifestBuilder {
 		manifest.bundles().forEach(bundle ->
 				bundle.contents().forEach(mod -> deliverable.add(mod.fileName())));
 
+		// Keyed by every name a file answers to, not only its id. A dependency is written
+		// against a name and Fabric lets one jar claim several, so a folder holding
+		// "cloth-config" does satisfy a dependency on "cloth-config2" — looking up the id alone
+		// reported it absent and sent the client a library it already had.
 		Map<String, String> fileByModId = new HashMap<>();
 
 		for (ScannedMod mod : mods) {
 			if (mod.modId() != null && !mod.modId().isBlank()) {
 				fileByModId.put(ModIds.normalise(mod.modId()), mod.fileName());
+			}
+		}
+
+		// A separate pass, and putIfAbsent: a jar's own id outranks any other jar's claim to
+		// that name, whichever order the folder happened to list them in.
+		for (ScannedMod mod : mods) {
+			for (String alias : mod.provides()) {
+				if (alias != null && !alias.isBlank()) {
+					fileByModId.putIfAbsent(ModIds.normalise(alias), mod.fileName());
+				}
+			}
+		}
+
+		// Last, and lowest priority: libraries that exist only inside another jar. Handing the
+		// carrier over hands these over with it, so the dependency is met by delivering that
+		// file — which is what the answer here means.
+		//
+		// Below the other two passes deliberately. A library that also ships as a file of its
+		// own should point at that file, because that is the copy the operator chose; the
+		// nested one is the fallback for when nobody shipped it separately, which for
+		// "flywheel" on 1.21.1 is everybody.
+		for (ScannedMod mod : mods) {
+			for (String bundled : mod.bundledIds()) {
+				if (bundled != null && !bundled.isBlank()) {
+					fileByModId.putIfAbsent(ModIds.normalise(bundled), mod.fileName());
+				}
 			}
 		}
 
@@ -315,6 +347,123 @@ public final class ManifestBuilder {
 	 * and leaving them in {@code unresolved} would tell every player to go and fetch a file
 	 * that is about to arrive on its own.
 	 */
+	/**
+	 * Turns dependencies nobody here has a file for into downloads, by asking Modrinth for
+	 * them by name.
+	 *
+	 * <p>This runs last, on what {@link #withUnmetDependencies} could not solve. Everything
+	 * else in the list is a file in this server's own folder, resolved to the same bytes on a
+	 * platform; these are the opposite case — a name with no file behind it anywhere on this
+	 * side. See {@link ServerSyncConfig#supplyMissingDependencies} for what that widens.
+	 *
+	 * <p>Whatever cannot be found stays in {@code unmetDependencies} exactly as it was, so a
+	 * failure here costs nothing: the client still hears that the library is missing and still
+	 * names the mods that wanted it.
+	 */
+	private static ModManifest supplyMissingDependencies(ModManifest manifest,
+			ServerSyncConfig config) {
+		if (!config.supplyMissingDependencies || manifest.unmetDependencies().isEmpty()) {
+			return manifest;
+		}
+
+		HttpClient http = HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(15))
+				.followRedirects(HttpClient.Redirect.NORMAL)
+				.build();
+
+		String gameVersion = AutoModFetcher.minecraftVersion();
+		List<String> loaders = dependencyLoaders();
+
+		List<ModEntry> supplied = new ArrayList<>();
+		Map<String, List<String>> stillUnmet = new LinkedHashMap<>();
+		int budget = config.dependencyLookupLimit;
+
+		for (Map.Entry<String, List<String>> unmet : manifest.unmetDependencies().entrySet()) {
+			String modId = unmet.getKey();
+
+			if (budget <= 0) {
+				stillUnmet.put(modId, unmet.getValue());
+				continue;
+			}
+
+			budget--;
+			ModrinthResolver.Supply supply = null;
+
+			for (String loaderId : loaders) {
+				supply = ModrinthResolver.resolveLatest(http, modId, gameVersion, loaderId);
+
+				if (supply != null) {
+					break;
+				}
+			}
+
+			if (supply == null) {
+				stillUnmet.put(modId, unmet.getValue());
+				continue;
+			}
+
+			Resolution resolution = supply.resolution();
+
+			// BOTH rather than a guess. Modrinth's version listing does not say which side a
+			// file belongs on, and the one thing known for certain is that a mod on this
+			// server will not start without it — so the client needs it.
+			supplied.add(new ModEntry(supply.fileName(), resolution.sha1(), resolution.sha512(),
+					resolution.size(), resolution.url(), ModSide.BOTH, modId, supply.version(), true));
+
+			AutoModFetcher.LOGGER.info(
+					"{} is needed by {} and is not on this server; offering Modrinth's {} ({}) so "
+							+ "clients can start", modId, String.join(", ", unmet.getValue()),
+					supply.fileName(), supply.version());
+		}
+
+		if (supplied.isEmpty()) {
+			return manifest;
+		}
+
+		List<ModEntry> entries = new ArrayList<>(manifest.entries());
+		entries.addAll(supplied);
+
+		// Named, not counted. A count tells an operator there is a problem and not which one,
+		// and these are exactly the ids worth looking up by hand: the usual reason one lands
+		// here is that it is published only inside another mod's jar, so the fix is to add that
+		// mod rather than to hunt for a file that was never released on its own.
+		if (stillUnmet.isEmpty()) {
+			AutoModFetcher.LOGGER.info("Supplied {} missing dependency file(s) from Modrinth",
+					supplied.size());
+		} else {
+			AutoModFetcher.LOGGER.warn("Supplied {} missing dependency file(s) from Modrinth. Still "
+					+ "nowhere to come from: {}. Modrinth has no build of these for this version and "
+					+ "loader; a library published only as a jar-in-jar looks exactly like this, and "
+					+ "arrives by adding the mod that carries it.",
+					supplied.size(), String.join(", ", stillUnmet.keySet()));
+		}
+
+		return new ModManifest(List.copyOf(entries), manifest.unresolved(), manifest.bundles(),
+				manifest.serverModIds(), Map.copyOf(stillUnmet), manifest.bundledPages());
+	}
+
+	/**
+	 * Which loader's build of a dependency to ask for.
+	 *
+	 * <p>Normally the one this server runs. A Connector server is the exception and has to be
+	 * asked about twice: it is a Forge server whose mods folder is largely Fabric jars, and a
+	 * library one of those needs exists on Modrinth as a Fabric build and often not as a Forge
+	 * one. Asking only for "forge" there finds nothing and reports every dependency as
+	 * unobtainable.
+	 */
+	private static List<String> dependencyLoaders() {
+		String own = Loader.INSTANCE.packLoaderId();
+		Set<String> loadedHere = new HashSet<>();
+		Loader.INSTANCE.loadedModIds().forEach(id -> loadedHere.add(ModIds.normalise(id)));
+
+		if ("fabric".equals(own)
+				|| !(loadedHere.contains("connectormod") || loadedHere.contains("connector"))) {
+			return List.of(own);
+		}
+
+		return List.of(own, "fabric");
+	}
+
 	private static ModManifest attachBundle(ModManifest manifest, ServerSyncConfig config) {
 		// Everything a bundle is allowed to carry: no download anywhere, and nobody refusing.
 		// Having a page is not a refusal — Modrinth hands one out for any project it knows,

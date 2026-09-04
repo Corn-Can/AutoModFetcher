@@ -1,6 +1,7 @@
 package com.corncan.automodfetcher.client;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,6 +16,7 @@ import com.corncan.automodfetcher.network.ModBundle;
 import com.corncan.automodfetcher.network.ModEntry;
 import com.corncan.automodfetcher.network.ModManifest;
 import com.corncan.automodfetcher.network.ModSide;
+import com.corncan.automodfetcher.platform.Loader;
 import com.corncan.automodfetcher.util.ModIds;
 
 public final class SyncPlanner {
@@ -130,7 +132,7 @@ public final class SyncPlanner {
 				.filter(entry -> !hasLocally(entry, index))
 				.toList();
 
-		List<String> foreign = findForeign(manifest, index, incoming);
+		List<String> foreign = findForeign(manifest, index, incoming, stillListed);
 
 		// Manual entries the player appears to already have, and does not. The name matches a
 		// jar in their folder; the bytes do not. Without this the screen names a file sitting
@@ -177,11 +179,7 @@ public final class SyncPlanner {
 		}
 
 		// Anything already here satisfies its own dependents; only what is missing matters.
-		for (ClientModIndex.LocalMod local : index.localMods()) {
-			if (local.modId() != null && !local.modId().isBlank()) {
-				wanted.remove(ModIds.normalise(local.modId()));
-			}
-		}
+		wanted.removeAll(idsPresentHere(index));
 
 		Map<String, String> offeredBy = new java.util.LinkedHashMap<>();
 
@@ -220,6 +218,42 @@ public final class SyncPlanner {
 	}
 
 	/**
+	 * Every id this installation answers to.
+	 *
+	 * <p>Three separate things are being asked the same question, and each of them used to
+	 * answer it by looking at one mod id per jar in the folder. That is the narrowest possible
+	 * reading of "has it", and it is wrong in two directions at once:
+	 *
+	 * <ul>
+	 * <li>A jar answers to more than its id. Fabric's {@code provides} makes {@code fabric-api}
+	 * the thing that satisfies a dependency on {@code fabric}, {@code balm} the thing that
+	 * satisfies {@code balm-fabric}, {@code cloth-config} the thing that satisfies
+	 * {@code cloth-config2}.
+	 * <li>A mods folder is not the mod list. Fabric API ships forty-nine libraries inside one
+	 * file, and {@code flywheel}, {@code kirin} and {@code lilylib} arrive the same way — inside
+	 * somebody else's jar, with no file of their own to find.
+	 * </ul>
+	 *
+	 * <p>Measured on a real 363-mod pack installed straight from CurseForge and joined to a
+	 * server running it: twelve libraries reported as missing, five of them aliased and seven
+	 * nested, every one of them loaded and running in the client being warned.
+	 */
+	private static Set<String> idsPresentHere(ClientModIndex.Index index) {
+		Set<String> present = new HashSet<>();
+
+		for (ClientModIndex.LocalMod local : index.localMods()) {
+			local.ids().forEach(id -> present.add(ModIds.normalise(id)));
+		}
+
+		// Asking the running game is the only way to see a nested library. It answers for the
+		// folder's jars too, so this is a superset — but the folder is still read, because the
+		// index is what maps an id back to a file and the loader is not.
+		Loader.INSTANCE.loadedModIds().forEach(id -> present.add(ModIds.normalise(id)));
+
+		return present;
+	}
+
+	/**
 	 * Dependencies the server has already worked out that nobody can download, minus the ones
 	 * this particular player turns out to have anyway.
 	 *
@@ -238,13 +272,7 @@ public final class SyncPlanner {
 			return List.of();
 		}
 
-		Set<String> present = new HashSet<>();
-
-		for (ClientModIndex.LocalMod local : index.localMods()) {
-			if (local.modId() != null && !local.modId().isBlank()) {
-				present.add(ModIds.normalise(local.modId()));
-			}
-		}
+		Set<String> present = idsPresentHere(index);
 
 		List<SyncPlan.MissingDependency> missing = new ArrayList<>();
 
@@ -296,7 +324,7 @@ public final class SyncPlanner {
 	 * </ol>
 	 */
 	private static List<String> findForeign(ModManifest manifest, ClientModIndex.Index index,
-			Set<String> incoming) {
+			Set<String> incoming, Set<String> stillListed) {
 		if (manifest.serverModIds().isEmpty()) {
 			return List.of();
 		}
@@ -317,8 +345,13 @@ public final class SyncPlanner {
 			// Connector server running that very jar reports "faster_random", and comparing
 			// them literally is how someone's own mods got moved into a disabled folder by a
 			// server that had them all along.
+			//
+			// Every name the jar answers to is tried, not only its id. Which of them the server
+			// reports is the server's business — it lists what its own loader told it, and that
+			// can be the alias — so matching on one name and calling the file foreign on the
+			// strength of it is the same mistake in a second spelling.
 			if (local.modId().equals(AutoModFetcher.MOD_ID)
-					|| serverIds.contains(ModIds.normalise(local.modId()))) {
+					|| local.ids().stream().map(ModIds::normalise).anyMatch(serverIds::contains)) {
 				continue;
 			}
 
@@ -341,6 +374,17 @@ public final class SyncPlanner {
 				continue;
 			}
 
+			// Nor is a file this server is offering. Its loader not running the id is not the
+			// same question as its mod list not carrying the file, and the two come apart for
+			// exactly the mods this matters most for: a library supplied to satisfy a
+			// client-side dependency is one the server deliberately hands out and deliberately
+			// does not load. Judged on loaded ids alone it looks foreign the moment it is
+			// installed, so the next connection offers to take it away again — install,
+			// remove, install, with the mod that needed it breaking either way.
+			if (stillListed.contains(local.fileName().toLowerCase(Locale.ROOT))) {
+				continue;
+			}
+
 			candidates.add(local);
 		}
 
@@ -356,42 +400,49 @@ public final class SyncPlanner {
 	 */
 	private static List<String> keepWhatIsStillNeeded(List<ClientModIndex.LocalMod> candidates,
 			ClientModIndex.Index index) {
+		// Tracked by file rather than by mod id, because a file answers to several ids and being
+		// needed under any one of them rescues the whole file. Keyed the other way round, a
+		// library required under its alias stayed condemned while the jar providing it sat in
+		// the folder — and the file is what would have been moved away.
+		//
 		// Dependency ids arrive lower-cased, so the ids they are matched against have to be
 		// too, or a mod that spells its own id with a capital is never recognised as rescued.
-		Set<String> doomed = new HashSet<>();
+		Set<String> doomedFiles = new LinkedHashSet<>();
+		Map<String, ClientModIndex.LocalMod> candidateByName = new HashMap<>();
 
 		for (ClientModIndex.LocalMod candidate : candidates) {
-			doomed.add(ModIds.normalise(candidate.modId()));
+			doomedFiles.add(candidate.fileName());
+
+			for (String id : candidate.ids()) {
+				candidateByName.putIfAbsent(ModIds.normalise(id), candidate);
+			}
 		}
 
 		boolean changed = true;
 
-		while (changed && !doomed.isEmpty()) {
+		while (changed && !doomedFiles.isEmpty()) {
 			changed = false;
 
 			for (ClientModIndex.LocalMod local : index.localMods()) {
-				if (local.modId() == null || doomed.contains(ModIds.normalise(local.modId()))) {
+				// A mod on its way out cannot vouch for anything; only what is being kept can.
+				if (doomedFiles.contains(local.fileName())) {
 					continue;
 				}
 
 				for (String required : local.requires()) {
-					if (doomed.remove(ModIds.normalise(required))) {
+					ClientModIndex.LocalMod rescued = candidateByName.get(ModIds.normalise(required));
+
+					if (rescued != null && doomedFiles.remove(rescued.fileName())) {
 						AutoModFetcher.LOGGER.info(
-								"Keeping {} even though this server does not run it: {} requires it",
-								required, local.modId());
+								"Keeping {} even though this server does not run it: {} requires {}",
+								rescued.fileName(), local.modId(), required);
 						changed = true;
 					}
 				}
 			}
 		}
 
-		List<String> foreign = new ArrayList<>();
-
-		for (ClientModIndex.LocalMod candidate : candidates) {
-			if (doomed.contains(ModIds.normalise(candidate.modId()))) {
-				foreign.add(candidate.fileName());
-			}
-		}
+		List<String> foreign = new ArrayList<>(doomedFiles);
 
 		foreign.sort(String::compareToIgnoreCase);
 

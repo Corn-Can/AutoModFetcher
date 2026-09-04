@@ -128,6 +128,35 @@ public class ServerSyncConfig {
 	 */
 	public int curseforgeLookupLimit = 50;
 
+	/**
+	 * Whether to find and offer libraries this server does not have but its mods need.
+	 *
+	 * <p>A dedicated server only enforces the dependencies its own side needs. A mod that
+	 * declares one it lacks starts here perfectly and takes down every client that installs
+	 * it — the failure is invisible from the server's own health, and the file is nowhere in
+	 * this folder for the mod list to offer. Left alone, the player is told a library is
+	 * missing and sent away to find it.
+	 *
+	 * <p>Turning this on widens what this server hands out. Everything else in the mod list
+	 * starts from bytes already sitting in this folder; these are files nobody here has seen,
+	 * found by name on Modrinth. They are still fetched by the client from Modrinth's own CDN
+	 * and still verified against the hash Modrinth published, so the trust being extended is
+	 * to Modrinth's answer for a name — not to this server, and not to an arbitrary URL.
+	 *
+	 * <p>On by default because the alternative is a client that will not launch, and because
+	 * every one of these is a library some mod in this folder has already said it needs.
+	 */
+	public boolean supplyMissingDependencies = true;
+
+	/**
+	 * How many missing dependencies may be looked up on Modrinth in one build.
+	 *
+	 * <p>One request each, and the same reasoning as {@link #curseforgeLookupLimit}: a
+	 * misconfigured folder should not turn into hundreds of requests. Anything past the cap is
+	 * still reported as missing, so nothing is hidden — it is only not fetched.
+	 */
+	public int dependencyLookupLimit = 50;
+
 	public static ServerSyncConfig load() {
 		Path path = ModPaths.configDir().resolve(FILE_NAME);
 		ServerSyncConfig config = Json.read(path, ServerSyncConfig.class, ServerSyncConfig::new);

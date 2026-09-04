@@ -1,12 +1,15 @@
 package com.corncan.automodfetcher.util;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.jar.Attributes;
@@ -15,6 +18,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 import com.corncan.automodfetcher.AutoModFetcher;
 import com.corncan.automodfetcher.network.ModSide;
@@ -29,11 +33,18 @@ import com.google.gson.JsonObject;
  * author's mod — not to us — so all three formats have to be understood regardless of which
  * loader we are running on. A Fabric jar left in a NeoForge server's mods folder should still
  * be recognised well enough to say something useful about it.
+ *
+ * @param provides other ids this jar answers to, so a dependency naming one of them is
+ *                 already satisfied. A mod's id is not the only name it can be required
+ *                 under: {@code fabric-api} provides {@code fabric}, {@code balm} provides
+ *                 {@code balm-fabric}, {@code cloth-config} provides {@code cloth-config2}.
+ *                 Reading only the id made five present libraries in one real 363-mod pack
+ *                 look missing, on a client that had every one of them loaded.
  */
 public record JarMetadata(String modId, String version, ModSide side, boolean sideKnown,
-		Set<String> requires, Set<String> loaders) {
+		Set<String> requires, Set<String> provides, Set<String> loaders) {
 	private static final JarMetadata UNKNOWN =
-			new JarMetadata(null, null, ModSide.BOTH, false, Set.of(), Set.of());
+			new JarMetadata(null, null, ModSide.BOTH, false, Set.of(), Set.of(), Set.of());
 
 	/**
 	 * Which loaders this jar is built for, taken from which metadata file it carries.
@@ -181,6 +192,7 @@ public record JarMetadata(String modId, String version, ModSide side, boolean si
 					ModSide.fromEnvironment(string(json, "environment")),
 					true,
 					fabricDependencies(json),
+					fabricProvides(json),
 					loaders
 			);
 		}
@@ -206,6 +218,132 @@ public record JarMetadata(String modId, String version, ModSide side, boolean si
 		}
 
 		return Set.copyOf(required);
+	}
+
+	/**
+	 * Reads {@code provides}: the other ids this jar satisfies a dependency on.
+	 *
+	 * <p>Fabric treats these as aliases of the mod itself, and so does everything that asks
+	 * whether a dependency is met — so anything comparing declared dependencies against
+	 * installed ids has to know them, or it reports libraries as absent while the loader is
+	 * running them. The five that turned up in one pack were {@code fabric}, {@code owo-lib},
+	 * {@code balm-fabric}, {@code cloth-config2} and {@code player-animator}, every one of
+	 * them provided by a jar sitting in the same folder.
+	 */
+	/**
+	 * Every mod id travelling <em>inside</em> this jar, aliases included.
+	 *
+	 * <p>Separate from {@link #read} and opt-in because it costs a pass over the jar's nested
+	 * archives, and only one side needs it. A client can ask its own loader what is running and
+	 * get nested mods in the answer; a server cannot ask that about a file it ships and never
+	 * loads, which is exactly the file this matters for.
+	 *
+	 * <p>The case it exists for, observed 2026-09-05: {@code vanillin} declares a dependency on
+	 * {@code flywheel}, and {@code flywheel} is published for 1.21.1 only inside Vanillin's own
+	 * jar — {@code META-INF/jars/flywheel-fabric-1.21.1-1.0.4.jar}. A server that ships Vanillin
+	 * to clients but does not load it (it is a rendering mod) could see the dependency and not
+	 * the library one zip level down, and told every player a library was missing while handing
+	 * them the file containing it.
+	 *
+	 * <p>Nested archives are walked rather than the declared {@code jars} list being trusted:
+	 * the declaration and the archive can disagree, and what will actually be on disk is the
+	 * archive.
+	 */
+	public static Set<String> bundledIds(Path jar) {
+		Set<String> ids = new LinkedHashSet<>();
+
+		try (ZipFile zip = new ZipFile(jar.toFile())) {
+			for (ZipEntry entry : nestedJars(zip)) {
+				try (InputStream in = zip.getInputStream(entry)) {
+					collectBundled(in.readAllBytes(), ids, 1);
+				} catch (Exception e) {
+					AutoModFetcher.LOGGER.debug("Could not read {} inside {}", entry.getName(),
+							jar.getFileName(), e);
+				}
+			}
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.debug("Could not read nested mods from {}", jar.getFileName(), e);
+		}
+
+		return Set.copyOf(ids);
+	}
+
+	/** Four levels is past anything real; the cap is here so a crafted jar cannot spin this. */
+	private static final int MAX_NESTING = 4;
+
+	private static List<ZipEntry> nestedJars(ZipFile zip) {
+		List<ZipEntry> found = new ArrayList<>();
+
+		zip.stream()
+				.filter(entry -> entry.getName().startsWith(NESTED_PREFIX))
+				.filter(entry -> entry.getName().toLowerCase(Locale.ROOT).endsWith(".jar"))
+				.forEach(found::add);
+
+		return found;
+	}
+
+	private static final String NESTED_PREFIX = "META-INF/jars/";
+
+	private static void collectBundled(byte[] jarBytes, Set<String> ids, int depth) {
+		if (depth > MAX_NESTING) {
+			return;
+		}
+
+		List<byte[]> deeper = new ArrayList<>();
+
+		try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(jarBytes))) {
+			ZipEntry entry;
+
+			while ((entry = zip.getNextEntry()) != null) {
+				String name = entry.getName();
+
+				if ("fabric.mod.json".equals(name)) {
+					JsonObject json = Json.GSON.fromJson(
+							new InputStreamReader(zip, StandardCharsets.UTF_8), JsonObject.class);
+
+					if (json != null) {
+						String id = string(json, "id");
+
+						if (id != null && !id.isBlank()) {
+							ids.add(id);
+						}
+
+						ids.addAll(fabricProvides(json));
+					}
+				} else if (name.startsWith(NESTED_PREFIX)
+						&& name.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+					deeper.add(zip.readAllBytes());
+				}
+			}
+		} catch (Exception e) {
+			AutoModFetcher.LOGGER.debug("Could not read a nested mod jar", e);
+		}
+
+		for (byte[] nested : deeper) {
+			collectBundled(nested, ids, depth + 1);
+		}
+	}
+
+	private static Set<String> fabricProvides(JsonObject json) {
+		JsonElement provides = json.get("provides");
+
+		if (provides == null || !provides.isJsonArray()) {
+			return Set.of();
+		}
+
+		Set<String> ids = new LinkedHashSet<>();
+
+		for (JsonElement element : provides.getAsJsonArray()) {
+			if (element != null && element.isJsonPrimitive()) {
+				String id = element.getAsString();
+
+				if (id != null && !id.isBlank()) {
+					ids.add(id);
+				}
+			}
+		}
+
+		return Set.copyOf(ids);
 	}
 
 	/**
@@ -312,8 +450,11 @@ public record JarMetadata(String modId, String version, ModSide side, boolean si
 			}
 		}
 
+		// Neither mods.toml nor neoforge.mods.toml has an equivalent of Fabric's "provides":
+		// a Forge mod answers to its id and nothing else, so an empty set here is the format's
+		// answer rather than an unread field.
 		return new JarMetadata(modId, resolveVersion(zip, version), ModSide.BOTH, false,
-				dependenciesOf(modId, dependenciesByOwner), loaders);
+				dependenciesOf(modId, dependenciesByOwner), Set.of(), loaders);
 	}
 
 	/**
