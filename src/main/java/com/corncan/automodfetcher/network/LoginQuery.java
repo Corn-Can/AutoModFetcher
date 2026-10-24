@@ -21,6 +21,10 @@ public final class LoginQuery {
 	private LoginQuery() {
 	}
 
+	/// The answer carries no channel id, only this, so it is the one thing that tells our
+	/// answer apart from another mod's. Matches ForgeLoginExchange.TRANSACTION.
+	public static final int TRANSACTION = 0x414D46;
+
 	/// Server to client: the mod list.
 	public record Query(ModManifest manifest) implements CustomQueryPayload {
 		@Override
