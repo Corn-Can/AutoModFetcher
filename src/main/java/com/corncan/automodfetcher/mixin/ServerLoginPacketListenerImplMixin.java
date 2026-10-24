@@ -45,9 +45,6 @@ public abstract class ServerLoginPacketListenerImplMixin {
 	}
 
 	@Unique
-	private static final int AUTOMODFETCHER_TRANSACTION = 0x414D46;
-
-	@Unique
 	private GameProfile automodfetcher$heldProfile;
 
 	/// Sends the query and holds the login, once. Everything else falls through to vanilla.
@@ -65,7 +62,7 @@ public abstract class ServerLoginPacketListenerImplMixin {
 		}
 
 		automodfetcher$heldProfile = profile;
-		connection.send(new ClientboundCustomQueryPacket(AUTOMODFETCHER_TRANSACTION,
+		connection.send(new ClientboundCustomQueryPacket(LoginQuery.TRANSACTION,
 				new LoginQuery.Query(manifest)));
 
 		AutoModFetcher.LOGGER.debug("Asked {} about {} mod file(s)",
@@ -76,7 +73,7 @@ public abstract class ServerLoginPacketListenerImplMixin {
 	/// Vanilla disconnects on any answer at all, so ours has to be taken before it looks.
 	@Inject(method = "handleCustomQueryPacket", at = @At("HEAD"), cancellable = true)
 	private void automodfetcher$onAnswer(ServerboundCustomQueryAnswerPacket packet, CallbackInfo callback) {
-		if (packet.transactionId() != AUTOMODFETCHER_TRANSACTION || automodfetcher$heldProfile == null) {
+		if (packet.transactionId() != LoginQuery.TRANSACTION || automodfetcher$heldProfile == null) {
 			return;
 		}
 

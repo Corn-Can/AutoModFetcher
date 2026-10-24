@@ -19,14 +19,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /// the flag has to be read here too, and "no answer" reported as null — which is exactly what
 /// a client without this mod sends.
 ///
-/// This runs for every unrecognised answer, not only ours. Nothing else on NeoForge uses login
-/// queries, and vanilla's handler disconnects on any of them regardless, so there is nothing
-/// to preserve.
+/// Only our transaction is taken. Other mods do use login queries on NeoForge — network mods
+/// that both sides must install handshake this way — and reading their answer as ours leaves
+/// bytes unread, which the decoder treats as a malformed packet and drops the connection.
 @Mixin(ServerboundCustomQueryAnswerPacket.class)
 public class ServerboundCustomQueryAnswerPacketMixin {
 	@Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
 	private static void automodfetcher$readAnswer(int transactionId, FriendlyByteBuf buf,
 			CallbackInfoReturnable<CustomQueryAnswerPayload> callback) {
+		if (transactionId != LoginQuery.TRANSACTION) {
+			return;
+		}
+
 		if (!buf.readBoolean()) {
 			callback.setReturnValue(null);
 			return;
